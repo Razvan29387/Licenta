@@ -9,7 +9,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 
 @RestController
-@RequestMapping("/firme")
+@RequestMapping("/api/firme") // Updated to include /api prefix
 public class FirmaController {
 
     private final FirmaRepository firmaRepository;

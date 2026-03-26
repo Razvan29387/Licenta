@@ -14,12 +14,19 @@ const FirmePage = () => {
   useEffect(() => {
     const loadAllFirms = async () => {
       try {
-        const response = await fetch('/firme');
+        // Updated endpoint to include /api prefix to match proxy configuration
+        const response = await fetch('/api/firme');
         if (!response.ok) {
           throw new Error(`Server responded with ${response.status}`);
         }
-        const data = await response.json();
-        setFirms(data);
+        
+        const contentType = response.headers.get("content-type");
+        if (contentType && contentType.indexOf("application/json") !== -1) {
+            const data = await response.json();
+            setFirms(data);
+        } else {
+            throw new Error("Received non-JSON response from server");
+        }
       } catch (err) {
         setError(err.message);
         console.error("Failed to load firms:", err);
@@ -40,10 +47,10 @@ const FirmePage = () => {
   const paginate = (pageNumber) => setCurrentPage(pageNumber);
 
   return (
-    <div>
+    <div style={{ padding: '20px' }}>
       <h1>Firme</h1>
       {error ? (
-        <p className="error">Error loading firms: {error}</p>
+        <p className="error" style={{color: 'red'}}>Error loading firms: {error}. Are you sure the backend is running and the /api/firme endpoint exists?</p>
       ) : (
         <>
           <FirmTable firms={currentFirms} isLoading={isLoading} />

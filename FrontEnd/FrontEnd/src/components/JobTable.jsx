@@ -21,10 +21,31 @@ const JobTable = ({ jobs }) => {
         </thead>
         <tbody>
           {jobs.map((job) => {
-            // Handle data from Backend Entity (or fallback to raw Adzuna structure)
-            const companyName = job.company?.name || job.company?.display_name || 'N/A';
-            const category = typeof job.category === 'string' ? job.category : (job.category?.label || 'N/A');
-            const location = typeof job.location === 'string' ? job.location : (job.location?.display_name || 'N/A');
+            // Logica de extragere a datelor:
+            // 1. Încercăm structura API backend (job.company.name)
+            // 2. Încercăm structura API brută Adzuna (job.company.display_name sau job.company) dacă e string
+            let companyName = 'N/A';
+
+            if (job.company) {
+                if (typeof job.company === 'string') {
+                    companyName = job.company;
+                } else if (job.company.name) {
+                    companyName = job.company.name;
+                } else if (job.company.display_name) {
+                    companyName = job.company.display_name;
+                }
+            }
+            
+            // Asigurăm-ne că location e string
+            const location = typeof job.location === 'string' 
+                ? job.location 
+                : (job.location?.display_name || 'N/A');
+
+            // Asigurăm-ne că category e string
+            const category = typeof job.category === 'string' 
+                ? job.category 
+                : (job.category?.label || 'N/A');
+
             const applyUrl = job.url || job.redirect_url || '#';
 
             return (

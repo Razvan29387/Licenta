@@ -45,7 +45,7 @@ public class AdzunaIngestionService {
 
                 if (results.isArray()) {
                     for (JsonNode jobNode : results) {
-                        saveJob(jobNode);
+                        saveJob(jobNode, country); // Pass the country here
                     }
                 }
 
@@ -61,7 +61,7 @@ public class AdzunaIngestionService {
         System.out.println("Import completed.");
     }
 
-    private void saveJob(JsonNode jobNode) {
+    private void saveJob(JsonNode jobNode, String countryCode) {
         String adzunaId = jobNode.path("id").asText();
         
         // Skip if job already exists
@@ -82,25 +82,47 @@ public class AdzunaIngestionService {
 
         // Extract Company
         String companyName = jobNode.path("company").path("display_name").asText();
-        if (companyName == null || companyName.isEmpty()) {
-             // Fallback for company name if display_name is missing but name exists (based on your JSON example)
+        if (companyName == null || companyName.isEmpty() || companyName.equals("null")) {
+             // Fallback for company name if display_name is missing or null
              companyName = jobNode.path("company").path("name").asText("Unknown Company");
         }
+        // IMPORTANT: Fetch the managed entity from DB to ensure relationships are created correctly
         Company company = findOrCreateCompany(companyName);
 
         // Extract Location
         String location = jobNode.path("location").path("display_name").asText();
-        if (location == null || location.isEmpty()) {
-             location = jobNode.path("location").asText("Unknown Location");
+        if (location == null || location.isEmpty() || location.equals("null")) {
+             location = jobNode.path("location").asText("Unknown Location"); // Fallback to direct location field
         }
+        
+        // Use the country code from the loop, make it uppercase for better readability
+        String country = countryCode.toUpperCase();
         
         // Extract Category
         String category = jobNode.path("category").path("label").asText();
-        if (category == null || category.isEmpty()) {
-             category = jobNode.path("category").asText("Uncategorized");
+        if (category == null || category.isEmpty() || category.equals("null")) {
+             category = jobNode.path("category").asText("Uncategorized"); // Fallback to direct category field
         }
 
-        Job job = new Job(adzunaId, title, location, url, category, description, company);
+        Job job = new Job(adzunaId, title, location, country, url, category, description, company);
+        
+        // Extract Salary details from Adzuna API
+        if (jobNode.has("salary_min") && !jobNode.path("salary_min").isNull()) {
+            job.setSalaryMin(jobNode.path("salary_min").asDouble());
+        }
+        if (jobNode.has("salary_max") && !jobNode.path("salary_max").isNull()) {
+            job.setSalaryMax(jobNode.path("salary_max").asDouble());
+        }
+        
+        // Adzuna mainly returns annual salaries, but sometimes indicates "is_hourly" or similar. 
+        // We'll set a default of "year" if salary exists, unless we detect otherwise.
+        if (job.getSalaryMin() != null || job.getSalaryMax() != null) {
+             job.setSalaryPeriod("year"); // Default Adzuna assumption
+        }
+        
+        // Explicitly set the company again, just to be sure (though constructor should handle it)
+        job.setCompany(company);
+
         jobRepository.save(job);
     }
 
@@ -110,6 +132,7 @@ public class AdzunaIngestionService {
             return existing.get();
         }
         Company newCompany = new Company(name);
+        // Save first to get an ID and ensure it exists as a node
         return companyRepository.save(newCompany);
     }
 }
