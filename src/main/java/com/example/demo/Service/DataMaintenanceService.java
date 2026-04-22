@@ -101,7 +101,7 @@ public class DataMaintenanceService {
         log.info("--- STARTING WEEKLY DATABASE PRUNING ---");
 
         // Setarea pragului de ștergere la 90 de zile pentru a preveni pierderea de date recentă.
-        LocalDateTime timeThreshold = LocalDateTime.now().minusDays(90);
+        LocalDateTime timeThreshold = LocalDateTime.now().minusDays(60);
         log.info("Pruning jobs older than 90 days (threshold: {}).", timeThreshold);
 
         List<Job> oldJobs = jobRepository.findByCreatedAtBefore(timeThreshold);
