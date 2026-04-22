@@ -113,10 +113,10 @@ const AdminPage = () => {
     };
 
     const handleLoadBackup = async (filename) => {
-        const isConfirmed = window.confirm(`CONFIRM ACTION\n\nThis will execute the backup script '${filename}' against the database. This can create duplicate data if not used on an empty database. Continue?`);
+        const isConfirmed = window.confirm(`CONFIRM LOAD BACKUP\n\nThis will DELETE ALL EXISTING DATA in the database and replace it completely with the contents of '${filename}'. \n\nAre you absolutely sure you want to proceed? This cannot be undone.`);
         if (!isConfirmed) return;
         setIsRestoring(filename);
-        setBackupMessage(`Executing script ${filename}...`);
+        setBackupMessage(`Clearing database and loading script ${filename}...`);
         try {
             const response = await fetch('/api/backups/load', {
                 method: 'POST',
@@ -133,18 +133,56 @@ const AdminPage = () => {
         }
     };
 
-    const getFlagEmoji = (countryCode) => {
-        if (!countryCode || countryCode.length !== 2) return '🌐';
-        const codePoints = countryCode.toUpperCase().split('').map(char => 127397 + char.charCodeAt());
-        return String.fromCodePoint(...codePoints);
+    // Dicționar detaliat pentru steaguri
+    const getFlagForCountry = (countryCode) => {
+        if (!countryCode) return '🌐';
+        
+        const code = countryCode.toUpperCase();
+
+        const flags = {
+            'GB': '🇬🇧', 
+            'UK': '🇬🇧',
+            'US': '🇺🇸', 
+            'USA': '🇺🇸',
+            'DE': '🇩🇪', 
+            'FR': '🇫🇷', 
+            'CA': '🇨🇦', 
+            'AU': '🇦🇺', 
+            'NL': '🇳🇱', 
+            'IN': '🇮🇳', 
+            'ES': '🇪🇸', 
+            'IT': '🇮🇹', 
+            'BR': '🇧🇷', 
+            'PL': '🇵🇱',
+            'AT': '🇦🇹',
+            'CH': '🇨🇭',
+            'RO': '🇷🇴',
+            'FB': '🇧🇷' // Am adăugat FB ca mapare manuală către Brazilia, în caz că e o greșeală în date
+        };
+        
+        if (flags[code]) {
+            return flags[code];
+        }
+
+        // Metoda fallback pentru generarea emoji-ului din codul de 2 litere (standard ISO)
+        if (code.length === 2) {
+             try {
+                const codePoints = code.split('').map(char => 127397 + char.charCodeAt());
+                return String.fromCodePoint(...codePoints);
+             } catch (e) {
+                return '🌐';
+             }
+        }
+        
+        return '🌐';
     };
 
     const renderTaskTitle = (taskName) => {
         if (taskName.startsWith('adzuna-')) {
             const countryCode = taskName.substring(7);
-            return <h3><span className="flag-emoji">{getFlagEmoji(countryCode)}</span>{taskName}</h3>;
+            return <h3><span className="flag-emoji" style={{ fontSize: '1.5em', marginRight: '8px' }}>{getFlagForCountry(countryCode)}</span>{taskName}</h3>;
         }
-        return <h3><span className="flag-emoji">🤖</span>{taskName}</h3>;
+        return <h3><span className="flag-emoji" style={{ fontSize: '1.5em', marginRight: '8px' }}>🤖</span>{taskName}</h3>;
     };
 
     const getTaskDescription = (taskName) => {
@@ -215,20 +253,20 @@ const AdminPage = () => {
                 <h2 className="section-title">Database Backup & Restore</h2>
                 <div className="task-card">
                     <div className="task-info">
-                        <h3>Automatic & Manual Backup</h3>
-                        <p>A <code>.cypherl</code> script is created automatically when the app shuts down. You can also use the button below to load a script manually.</p>
+                        <h3>Automatic Backup</h3>
+                        <p>A <code>.cypherl</code> script is created automatically in the 'backups' directory every time the application is shut down.</p>
                     </div>
                 </div>
                 <div className="task-card">
-                    <div className="task-info"><h3>Available CypherL Backups</h3><p>Select a backup script to execute it against the database.</p></div>
+                    <div className="task-info"><h3>Available CypherL Backups</h3><p>Select a backup script to execute it against the database. <strong>Warning: This will clear the current database before loading.</strong></p></div>
                     <div className="backup-list">
                         {backups.length > 0 ? (
                             <ul>
                                 {backups.map(file => (
                                     <li key={file}>
                                         <span>📜 {file}</span>
-                                        <button onClick={() => handleLoadBackup(file)} disabled={isRestoring === file} className="load-button">
-                                            {isRestoring === file ? 'Loading...' : 'Load'}
+                                        <button onClick={() => handleLoadBackup(file)} disabled={isRestoring === file} className="load-button" style={{backgroundColor: '#dc3545'}}>
+                                            {isRestoring === file ? 'Loading...' : 'Restore Full Backup'}
                                         </button>
                                     </li>
                                 ))}

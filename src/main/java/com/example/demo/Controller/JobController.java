@@ -6,18 +6,22 @@ import com.example.demo.Repository.ApplicationRepository;
 import com.example.demo.Repository.CompanyRepository;
 import com.example.demo.Repository.JobRepository;
 import com.example.demo.Request_DTO.JobRequestDTO;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.data.neo4j.core.Neo4jClient;
 
 import java.net.URI;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.stream.Collectors;
+import java.util.ArrayList;
 
 @RestController
 @RequestMapping("/api")
@@ -36,11 +40,20 @@ public class JobController {
     }
 
     @GetMapping("/jobs")
-    public List<Job> getAllJobs(@RequestParam(required = false) String companyName) {
-        if (companyName != null && !companyName.isEmpty()) {
-            return jobRepository.findByCompanyName(companyName);
+    public Page<Job> getAllJobs(
+            @RequestParam(required = false) String country,
+            @RequestParam(required = false) String category,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        
+        Pageable pageable = PageRequest.of(page, size);
+        if (country != null && !country.isEmpty()) {
+            return jobRepository.findByCountry(country, pageable);
         }
-        return jobRepository.findAll();
+        if (category != null && !category.isEmpty()) {
+            return jobRepository.findByCategory(category, pageable);
+        }
+        return jobRepository.findAll(pageable);
     }
 
     @GetMapping("/jobs/{id}")
@@ -96,28 +109,41 @@ public class JobController {
         long totalJobs = jobRepository.countJobs();
         long totalCompanies = companyRepository.countCompanies();
         long totalApplications = applicationRepository.count();
+
+        // Query for jobs by country
+        String countryQuery = "MATCH (j:Job) WHERE j.country IS NOT NULL AND j.country <> 'Unknown Country' AND j.country <> 'null' AND j.country <> 'Unknown' " +
+                             "RETURN j.country AS country, count(j) AS count ORDER BY count DESC LIMIT 10";
         
-        String cypherQuery = "MATCH (j:Job) WHERE j.country IS NOT NULL AND j.country <> 'Unknown Country' AND j.country <> 'null' AND j.country <> 'Unknown' " +
-                             "RETURN j.country AS country, count(j) AS count ORDER BY count DESC";
-        
-        List<Map<String, Object>> jobsByCountry = (List<Map<String, Object>>) neo4jClient.query(cypherQuery)
+        Collection<Map> countryData = neo4jClient.query(countryQuery)
             .fetchAs(Map.class)
-            .mappedBy((typeSystem, record) -> {
-                Map<String, Object> map = new HashMap<>();
-                map.put("country", record.get("country").asString());
-                map.put("count", record.get("count").asLong());
-                return map;
-            })
-            .all()
-            .stream()
-            .map(m -> (Map<String,Object>)m)
-            .collect(Collectors.toList());
+            .mappedBy((typeSystem, record) -> Map.of("country", record.get("country").asString(), "count", record.get("count").asLong()))
+            .all();
+
+        List<Map<String, Object>> jobsByCountry = new ArrayList<>();
+        for (Map m : countryData) {
+            jobsByCountry.add((Map<String, Object>) m);
+        }
         
+        // Query for jobs by category
+        String categoryQuery = "MATCH (j:Job) WHERE j.category IS NOT NULL AND j.category <> 'Uncategorized' AND j.category <> 'null' AND j.category <> 'Unknown' " +
+                               "RETURN j.category AS category, count(j) AS count ORDER BY count DESC LIMIT 10";
+
+        Collection<Map> categoryData = neo4jClient.query(categoryQuery)
+            .fetchAs(Map.class)
+            .mappedBy((typeSystem, record) -> Map.of("category", record.get("category").asString(), "count", record.get("count").asLong()))
+            .all();
+        
+        List<Map<String, Object>> jobsByCategory = new ArrayList<>();
+        for (Map m : categoryData) {
+            jobsByCategory.add((Map<String, Object>) m);
+        }
+
         Map<String, Object> stats = new HashMap<>();
         stats.put("totalJobs", totalJobs);
         stats.put("totalCompanies", totalCompanies);
         stats.put("totalApplications", totalApplications);
         stats.put("jobsByCountry", jobsByCountry);
+        stats.put("jobsByCategory", jobsByCategory);
         
         return ResponseEntity.ok(stats);
     }

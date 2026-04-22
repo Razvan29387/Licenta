@@ -76,13 +76,15 @@ public class BackupService implements DisposableBean {
 
             // 1. Creăm Nodurile de tip Company (stil Memgraph)
             for (Company c : validCompanies) {
-                writer.println(String.format("CREATE (:`Company` {`name`: '%s'});", escapeCypher(c.getName())));
+                // Înlocuim CREATE cu MERGE
+                writer.println(String.format("MERGE (:`Company` {`name`: '%s'});", escapeCypher(c.getName())));
             }
 
             // 2. Creăm Nodurile de tip Job
             for (Job j : validJobs) {
+                // Folosim MERGE cu SET
                 writer.println(String.format(
-                        "CREATE (:`Job` {`adzunaId`: '%s', `title`: '%s', `location`: '%s', `country`: '%s', `category`: '%s', `url`: '%s', `description`: '%s'});",
+                        "MERGE (j:`Job` {`adzunaId`: '%s'}) SET j.`title` = '%s', j.`location` = '%s', j.`country` = '%s', j.`category` = '%s', j.`url` = '%s', j.`description` = '%s';",
                         escapeCypher(j.getAdzunaId()),
                         escapeCypher(j.getTitle()),
                         escapeCypher(j.getLocation()),
@@ -97,7 +99,7 @@ public class BackupService implements DisposableBean {
             for (Job j : validJobs) {
                 if (j.getCompany() != null && j.getCompany().getName() != null) {
                     writer.println(String.format(
-                            "MATCH (u:`Job`), (v:`Company`) WHERE u.`adzunaId` = '%s' AND v.`name` = '%s' CREATE (u)-[:`POSTED_BY`]->(v);",
+                            "MATCH (u:`Job`), (v:`Company`) WHERE u.`adzunaId` = '%s' AND v.`name` = '%s' MERGE (u)-[:`POSTED_BY`]->(v);",
                             escapeCypher(j.getAdzunaId()),
                             escapeCypher(j.getCompany().getName())
                     ));
@@ -119,6 +121,21 @@ public class BackupService implements DisposableBean {
         }
 
         log.info("Starting to load backup from CypherL script: {}", filename);
+        
+        // Înainte de a încărca noul backup, ștergem baza de date completă pentru a preveni coliziunile și nodurile orfane.
+        // Aceasta e cea mai sigură și curată metodă când importăm un backup complet.
+        log.info("Clearing existing database before loading backup...");
+        try (Session session = driver.session()) {
+            session.executeWrite(tx -> {
+                tx.run("MATCH (n) DETACH DELETE n");
+                return null;
+            });
+            log.info("Database cleared successfully.");
+        } catch (Exception e) {
+            log.error("Failed to clear database before backup load. Aborting load.", e);
+            throw new RuntimeException("Failed to clear database before loading backup.", e);
+        }
+
         int lineCount = 0;
         try (BufferedReader reader = Files.newBufferedReader(filePath, StandardCharsets.UTF_8)) {
             String line;

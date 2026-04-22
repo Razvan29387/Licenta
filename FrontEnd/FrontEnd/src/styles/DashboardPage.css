@@ -6,117 +6,161 @@
   flex-direction: column;
   align-items: center;
   min-height: 100vh;
-  padding: 20px;
-  background: linear-gradient(180deg, #f7f9fc 0%, #eef2f7 100%);
+  padding: 40px 20px; /* Mai mult padding sus/jos */
+  background: linear-gradient(135deg, #f6f8fb 0%, #e9edf3 100%); /* Gradient mai subtil */
   font-family: 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
 }
 
 /* --- Secțiunea Hero --- */
 .hero-section {
   width: 100%;
-  max-width: 950px;
+  max-width: 1200px; /* Mărit puțin pentru spațiu aerisit */
   text-align: center;
-  background-color: white;
-  padding: 30px;
-  border-radius: 16px;
-  box-shadow: 0 8px 30px rgba(0, 40, 120, 0.05);
-  border: 1px solid #e0e5ec;
-  position: relative; /* Necesar pentru poziționarea link-ului de admin */
+  background-color: transparent; /* Eliminăm card-ul alb principal pentru un aspect mai modern */
+  padding: 0;
+  border-radius: 0;
+  box-shadow: none;
+  border: none;
+  position: relative;
 }
 
 /* --- Link Admin --- */
 .admin-link {
   position: absolute;
-  top: 15px;
-  right: 15px;
+  top: -20px;
+  right: 0;
   font-size: 1.5rem;
   text-decoration: none;
   color: #8a9ab0;
-  transition: transform 0.2s, color 0.2s;
+  transition: transform 0.3s ease, color 0.3s ease;
+  background: white;
+  width: 45px;
+  height: 45px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
 }
 
 .admin-link:hover {
-  transform: rotate(45deg);
-  color: #007bff;
+  transform: rotate(90deg);
+  color: #0056b3;
+  box-shadow: 0 6px 16px rgba(0,0,0,0.12);
 }
 
-
 .hero-title {
-  font-size: 2.5rem;
-  color: #2c3e50;
-  margin-bottom: 10px;
-  font-weight: 700;
+  font-size: 3rem; /* Titlu mai mare și mai impactant */
+  color: #1a2a3a;
+  margin-bottom: 15px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
 }
 
 .hero-subtitle {
-  font-size: 1.1rem;
+  font-size: 1.2rem;
   color: #5a6b7b;
-  margin: 0 auto 25px auto;
-  max-width: 700px;
+  margin: 0 auto 40px auto; /* Mai mult spațiu jos */
+  max-width: 750px;
+  line-height: 1.6;
 }
 
 /* --- Căutare --- */
 .search-container {
   display: flex;
-  gap: 10px;
+  gap: 12px;
   justify-content: center;
-  margin-bottom: 25px;
+  margin-bottom: 50px; /* Spațiu mai mare înainte de statistici */
+  max-width: 800px;
+  margin-left: auto;
+  margin-right: auto;
 }
 
 .search-input {
-  padding: 14px 22px;
-  width: 50%;
-  border-radius: 25px;
-  border: 1px solid #dbe1e8;
-  font-size: 16px;
+  padding: 16px 24px;
+  width: 70%; /* Mai lată */
+  border-radius: 30px;
+  border: 2px solid transparent;
+  font-size: 1.1rem;
   outline: none;
-  transition: border-color 0.2s, box-shadow 0.2s;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.06);
+  transition: all 0.3s ease;
 }
 
 .search-input:focus {
   border-color: #007bff;
-  box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.1);
+  box-shadow: 0 6px 25px rgba(0, 123, 255, 0.15);
+  transform: translateY(-2px);
 }
 
 .search-button {
-  padding: 14px 28px;
-  border-radius: 25px;
+  padding: 16px 36px;
+  border-radius: 30px;
   border: none;
-  background-color: #007bff;
+  background: linear-gradient(135deg, #007bff, #0056b3);
   color: white;
   cursor: pointer;
-  font-size: 16px;
+  font-size: 1.1rem;
   font-weight: 600;
-  transition: background-color 0.2s, transform 0.1s;
+  box-shadow: 0 4px 15px rgba(0, 123, 255, 0.3);
+  transition: all 0.3s ease;
+}
+
+.search-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(0, 123, 255, 0.4);
 }
 
 .search-button:active {
-  transform: scale(0.98);
+  transform: scale(0.96);
 }
 
-/* --- Statistici --- */
+/* --- Statistici Generale (Top) --- */
 .stats-container {
   display: flex;
   justify-content: center;
-  gap: 20px;
-  margin-bottom: 25px;
+  gap: 30px;
+  margin-bottom: 50px;
   flex-wrap: wrap;
 }
 
 .stat-box {
   text-align: center;
-  padding: 15px 20px;
-  background-color: #f8f9fa;
-  border-radius: 12px;
-  min-width: 160px;
-  border: 1px solid #dfe6f0;
-  transition: transform 0.2s, box-shadow 0.2s;
+  padding: 25px 30px;
+  background-color: white;
+  border-radius: 20px;
+  min-width: 200px;
+  border: none;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.04);
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Un efect de linie subțire colorată sus pentru fiecare cutie */
+.stat-box::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+}
+
+.stat-box:nth-child(1)::before { background-color: #007bff; }
+.stat-box:nth-child(2)::before { background-color: #17a2b8; }
+.stat-box:nth-child(3)::before { background-color: #fd7e14; }
+
+.stat-box:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 15px 35px rgba(0,0,0,0.08);
 }
 
 .stat-number {
-  font-size: 2.2rem;
+  font-size: 2.8rem;
   margin: 0 0 5px 0;
-  font-weight: 700;
+  font-weight: 800;
+  line-height: 1;
 }
 
 .stat-number.blue { color: #007bff; }
@@ -125,67 +169,138 @@
 
 .stat-label {
   margin: 0;
-  color: #495057;
+  color: #6c757d;
   font-weight: 600;
-  font-size: 0.9rem;
+  font-size: 1rem;
+  text-transform: uppercase;
+  letter-spacing: 1px;
 }
 
-/* --- Locații Populare --- */
-.locations-section {
+/* --- Grid Container pentru Locații și Categorii --- */
+.grid-container {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 40px;
   width: 100%;
-  text-align: center;
-  margin-top: 15px;
+  margin-top: 20px;
+  background-color: white;
+  padding: 40px;
+  border-radius: 24px;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.03);
 }
 
-.locations-title {
-  color: #34495e;
-  border-bottom: 2px solid #007bff;
-  padding-bottom: 8px;
-  display: inline-block;
-  margin-bottom: 20px;
-  font-size: 1.3rem;
-  font-weight: 600;
+.stats-grid-section {
+  width: 100%;
+  text-align: left; /* Aliniem la stânga pentru un aspect mai serios */
 }
 
-.locations-grid {
+.grid-title {
+  color: #1a2a3a;
   display: flex;
-  flex-wrap: wrap;
-  gap: 15px;
-  justify-content: center;
+  align-items: center;
+  margin-bottom: 25px;
+  font-size: 1.5rem;
+  font-weight: 700;
 }
 
-.location-card {
-  background-color: #ffffff;
-  padding: 15px;
-  border-radius: 10px;
-  border: 1px solid #e0e5ec;
+/* Adăugăm o bulină colorată în fața titlului secțiunii */
+.grid-title::before {
+  content: '';
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  margin-right: 12px;
+}
+
+.stats-grid-section:first-child .grid-title::before { background-color: #28a745; }
+.stats-grid-section:last-child .grid-title::before { background-color: #6f42c1; }
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); /* Grid auto-adaptabil */
+  gap: 15px;
+}
+
+.grid-card {
+  background-color: #f8f9fa;
+  padding: 20px 15px;
+  border-radius: 16px;
+  border: 1px solid transparent;
   display: flex;
   flex-direction: column;
   align-items: center;
+  text-align: center;
   cursor: pointer;
-  transition: transform 0.2s, box-shadow 0.2s;
-  min-width: 110px;
-  box-shadow: 0 4px 10px rgba(0, 40, 120, 0.03);
+  transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); /* Tranziție cu efect de "bounce" */
 }
 
-.location-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 8px 20px rgba(0, 40, 120, 0.08);
+.grid-card:hover {
+  background-color: #ffffff;
+  border-color: #007bff;
+  transform: translateY(-5px) scale(1.03);
+  box-shadow: 0 10px 25px rgba(0, 123, 255, 0.15);
 }
 
-.location-card span:first-of-type {
-  font-size: 22px;
-  margin-bottom: 8px;
+.grid-card span:first-of-type {
+  font-size: 28px;
+  margin-bottom: 12px;
+  transition: transform 0.3s ease;
 }
 
-.location-card .country-name {
-  font-weight: 600;
+.grid-card:hover span:first-of-type {
+  transform: scale(1.2);
+}
+
+.grid-card .grid-name {
+  font-weight: 700;
   color: #343a40;
-  font-size: 0.9rem;
+  font-size: 0.95rem;
+  margin-bottom: 4px;
 }
 
-.location-card .job-count {
-  color: #6c757d;
-  font-size: 0.8rem;
-  margin-top: 4px;
+.grid-card .grid-count {
+  color: #8a9ab0;
+  font-size: 0.85rem;
+  font-weight: 500;
+  background-color: #e9ecef;
+  padding: 2px 8px;
+  border-radius: 12px;
+}
+
+.grid-card:hover .grid-count {
+  background-color: #cce5ff;
+  color: #004085;
+}
+
+/* Responsive */
+@media (max-width: 992px) {
+  .grid-container {
+    grid-template-columns: 1fr;
+    padding: 30px 20px;
+  }
+
+  .search-container {
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .search-input {
+    width: 100%;
+  }
+
+  .search-button {
+    width: 100%;
+  }
+}
+
+@media (max-width: 600px) {
+  .hero-title {
+    font-size: 2rem;
+  }
+
+  .stat-box {
+    width: 100%;
+    margin-bottom: 10px;
+  }
 }

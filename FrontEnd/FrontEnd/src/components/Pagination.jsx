@@ -1,75 +1,86 @@
 import React from 'react';
 
-const Pagination = ({ itemsPerPage, totalItems, paginate, currentPage }) => {
-  const totalPages = Math.ceil(totalItems / itemsPerPage);
-
-  if (totalPages <= 1) return null;
-
-  const pageNumbers = [];
-
-  if (totalPages <= 7) {
-    for (let i = 1; i <= totalPages; i++) {
-      pageNumbers.push(i);
-    }
-  } else {
-    if (currentPage <= 4) {
-      for (let i = 1; i <= 5; i++) pageNumbers.push(i);
-      pageNumbers.push('...');
-      pageNumbers.push(totalPages);
-    } else if (currentPage >= totalPages - 3) {
-      pageNumbers.push(1);
-      pageNumbers.push('...');
-      for (let i = totalPages - 4; i <= totalPages; i++) pageNumbers.push(i);
-    } else {
-      pageNumbers.push(1);
-      pageNumbers.push('...');
-      pageNumbers.push(currentPage - 1);
-      pageNumbers.push(currentPage);
-      pageNumbers.push(currentPage + 1);
-      pageNumbers.push('...');
-      pageNumbers.push(totalPages);
-    }
+const Pagination = ({ currentPage, totalPages, onPageChange }) => {
+  if (totalPages <= 1) {
+    return null; // Don't render pagination if there's only one page
   }
 
-  const handlePaginate = (e, number) => {
-    e.preventDefault();
-    if (number >= 1 && number <= totalPages) {
-      paginate(number);
-    }
+  const styles = {
+    paginationContainer: {
+      display: 'flex',
+      justifyContent: 'center',
+      alignItems: 'center',
+      gap: '10px',
+      marginTop: '40px',
+      padding: '20px',
+      fontFamily: "'Segoe UI', sans-serif",
+    },
+    button: {
+      padding: '10px 15px',
+      border: '1px solid #ddd',
+      borderRadius: '6px',
+      backgroundColor: 'white',
+      cursor: 'pointer',
+      fontWeight: '600',
+      color: '#333',
+      transition: 'background-color 0.2s, color 0.2s',
+    },
+    buttonDisabled: {
+      padding: '10px 15px',
+      border: '1px solid #eee',
+      borderRadius: '6px',
+      backgroundColor: '#f9f9f9',
+      cursor: 'not-allowed',
+      color: '#aaa',
+    },
+    pageInfo: {
+      fontWeight: 'bold',
+      color: '#555',
+    },
   };
 
+  const handleFirst = () => onPageChange(0);
+  const handlePrevious = () => onPageChange(currentPage - 1);
+  const handleNext = () => onPageChange(currentPage + 1);
+  const handleLast = () => onPageChange(totalPages - 1);
+
+  const isFirstPage = currentPage === 0;
+  const isLastPage = currentPage === totalPages - 1;
+
   return (
-    <nav>
-      <ul className="pagination" style={{ justifyContent: 'center', display: 'flex', listStyle: 'none', padding: 0, gap: '5px' }}>
-        {/* First & Prev Buttons */}
-        <li className={`page-item ${currentPage === 1 ? 'disabled' : ''}`}>
-          <a onClick={(e) => handlePaginate(e, 1)} href="#" className="page-link">First</a>
-        </li>
-        <li className={`page-item ${currentPage === 1 ? 'disabled' : ''}`}>
-          <a onClick={(e) => handlePaginate(e, currentPage - 1)} href="#" className="page-link">Prev</a>
-        </li>
-
-        {pageNumbers.map((number, index) => (
-          <li key={index} className={`page-item ${currentPage === number ? 'active' : ''} ${number === '...' ? 'disabled' : ''}`}>
-            {number === '...' ? (
-              <span className="page-link">...</span>
-            ) : (
-              <a onClick={(e) => handlePaginate(e, number)} href="#" className="page-link">
-                {number}
-              </a>
-            )}
-          </li>
-        ))}
-
-        {/* Next & Last Buttons */}
-        <li className={`page-item ${currentPage === totalPages ? 'disabled' : ''}`}>
-          <a onClick={(e) => handlePaginate(e, currentPage + 1)} href="#" className="page-link">Next</a>
-        </li>
-        <li className={`page-item ${currentPage === totalPages ? 'disabled' : ''}`}>
-          <a onClick={(e) => handlePaginate(e, totalPages)} href="#" className="page-link">Last</a>
-        </li>
-      </ul>
-    </nav>
+    <div style={styles.paginationContainer}>
+      <button 
+        style={isFirstPage ? styles.buttonDisabled : styles.button} 
+        onClick={handleFirst} 
+        disabled={isFirstPage}
+      >
+        First
+      </button>
+      <button 
+        style={isFirstPage ? styles.buttonDisabled : styles.button} 
+        onClick={handlePrevious} 
+        disabled={isFirstPage}
+      >
+        Previous
+      </button>
+      <span style={styles.pageInfo}>
+        Page {currentPage + 1} of {totalPages}
+      </span>
+      <button 
+        style={isLastPage ? styles.buttonDisabled : styles.button} 
+        onClick={handleNext} 
+        disabled={isLastPage}
+      >
+        Next
+      </button>
+      <button 
+        style={isLastPage ? styles.buttonDisabled : styles.button} 
+        onClick={handleLast} 
+        disabled={isLastPage}
+      >
+        Last
+      </button>
+    </div>
   );
 };
 

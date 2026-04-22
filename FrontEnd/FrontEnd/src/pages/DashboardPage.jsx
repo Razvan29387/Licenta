@@ -1,9 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import '../styles/DashboardPage.css'; // Importă fișierul CSS
+import '../styles/DashboardPage.css';
 
 const DashboardPage = () => {
-  const [stats, setStats] = useState({ totalJobs: 0, totalCompanies: 0, totalApplications: 0, jobsByCountry: [] });
+  const [stats, setStats] = useState({ 
+    totalJobs: 0, 
+    totalCompanies: 0, 
+    totalApplications: 0, 
+    jobsByCountry: [],
+    jobsByCategory: [] 
+  });
   const [searchTerm, setSearchTerm] = useState('');
   const navigate = useNavigate();
 
@@ -17,7 +23,8 @@ const DashboardPage = () => {
               totalJobs: data.totalJobs || 0,
               totalCompanies: data.totalCompanies || 0,
               totalApplications: data.totalApplications || 0,
-              jobsByCountry: data.jobsByCountry || []
+              jobsByCountry: data.jobsByCountry || [],
+              jobsByCategory: data.jobsByCategory || []
           });
         }
       } catch (error) {
@@ -36,15 +43,72 @@ const DashboardPage = () => {
     if (e.key === 'Enter') handleSearch();
   };
 
-  const handleCountryClick = (countryName) => {
-      navigate('/jobs', { state: { country: countryName } });
+  const handleFilterClick = (filterType, value) => {
+      navigate('/jobs', { state: { [filterType]: value } });
+  };
+
+  // Funcție pentru a returna steagul corect pe baza numelui țării
+  const getFlagForCountry = (countryName) => {
+    const flags = {
+      'gb': '🇬🇧', 'uk': '🇬🇧', 'united kingdom': '🇬🇧',
+      'us': '🇺🇸', 'usa': '🇺🇸', 'united states': '🇺🇸',
+      'de': '🇩🇪', 'germany': '🇩🇪',
+      'fr': '🇫🇷', 'france': '🇫🇷',
+      'ca': '🇨🇦', 'canada': '🇨🇦',
+      'au': '🇦🇺', 'australia': '🇦🇺',
+      'nl': '🇳🇱', 'netherlands': '🇳🇱',
+      'in': '🇮🇳', 'india': '🇮🇳',
+      'es': '🇪🇸', 'spain': '🇪🇸',
+      'it': '🇮🇹', 'italy': '🇮🇹',
+      'br': '🇧🇷', 'brazil': '🇧🇷',
+      'pl': '🇵🇱', 'poland': '🇵🇱',
+      'at': '🇦🇹', 'austria': '🇦🇹',
+      'ch': '🇨🇭', 'switzerland': '🇨🇭',
+      'ro': '🇷🇴', 'romania': '🇷🇴',
+      'fb': '🇧🇷' // adaug si fallback-ul cerut pentru 'fb'
+    };
+    
+    if (!countryName) return '🌍';
+    const lowerName = countryName.toLowerCase();
+    
+    if (flags[lowerName]) {
+        return flags[lowerName];
+    }
+    
+    // Fallback logic
+    if (countryName.length === 2) {
+         try {
+            const codePoints = countryName.toUpperCase().split('').map(char => 127397 + char.charCodeAt());
+            return String.fromCodePoint(...codePoints);
+         } catch (e) {
+            return '🌍';
+         }
+    }
+
+    return '🌍';
+  };
+
+  // Funcție pentru a returna o iconiță sugestivă pentru categorii
+  const getIconForCategory = (categoryName) => {
+    if (!categoryName) return '📁';
+    const lowerCat = categoryName.toLowerCase();
+    if (lowerCat.includes('it') || lowerCat.includes('software') || lowerCat.includes('dev')) return '💻';
+    if (lowerCat.includes('data') || lowerCat.includes('analy')) return '📊';
+    if (lowerCat.includes('design') || lowerCat.includes('ui') || lowerCat.includes('ux')) return '🎨';
+    if (lowerCat.includes('market') || lowerCat.includes('seo')) return '📈';
+    if (lowerCat.includes('sale') || lowerCat.includes('business')) return '💼';
+    if (lowerCat.includes('financ') || lowerCat.includes('account')) return '💰';
+    if (lowerCat.includes('hr') || lowerCat.includes('human')) return '🤝';
+    if (lowerCat.includes('engineer')) return '⚙️';
+    if (lowerCat.includes('admin') || lowerCat.includes('office')) return '🗄️';
+    if (lowerCat.includes('health') || lowerCat.includes('medic')) return '⚕️';
+    return '📁'; // Fallback
   };
 
   return (
     <div className="dashboard-container">
       <div className="hero-section">
         
-        {/* Admin Link */}
         <Link to="/admin" className="admin-link" title="Admin Tasks">
           ⚙️
         </Link>
@@ -86,26 +150,49 @@ const DashboardPage = () => {
             </div>
         </div>
 
-        {stats.jobsByCountry && stats.jobsByCountry.length > 0 && (
-            <div className="locations-section">
-                <h3 className="locations-title">
-                    Popular Locations
-                </h3>
-                <div className="locations-grid">
-                    {stats.jobsByCountry.map((item, index) => (
-                        <div 
-                            key={index} 
-                            className="location-card"
-                            onClick={() => handleCountryClick(item.country)}
-                        >
-                            <span>🌍</span>
-                            <span className="country-name">{item.country}</span>
-                            <span className="job-count">{item.count} jobs</span>
-                        </div>
-                    ))}
-                </div>
-            </div>
-        )}
+        <div className="grid-container">
+          {stats.jobsByCountry && stats.jobsByCountry.length > 0 && (
+              <div className="stats-grid-section">
+                  <h3 className="grid-title">
+                      Popular Locations
+                  </h3>
+                  <div className="grid">
+                      {stats.jobsByCountry.map((item, index) => (
+                          <div 
+                              key={`country-${index}`} 
+                              className="grid-card"
+                              onClick={() => handleFilterClick('country', item.country)}
+                          >
+                              <span>{getFlagForCountry(item.country)}</span>
+                              <span className="grid-name">{item.country}</span>
+                              <span className="grid-count">{item.count} jobs</span>
+                          </div>
+                      ))}
+                  </div>
+              </div>
+          )}
+
+          {stats.jobsByCategory && stats.jobsByCategory.length > 0 && (
+              <div className="stats-grid-section">
+                  <h3 className="grid-title">
+                      Popular Categories
+                  </h3>
+                  <div className="grid">
+                      {stats.jobsByCategory.map((item, index) => (
+                          <div 
+                              key={`category-${index}`} 
+                              className="grid-card"
+                              onClick={() => handleFilterClick('category', item.category)}
+                          >
+                              <span>{getIconForCategory(item.category)}</span>
+                              <span className="grid-name">{item.category}</span>
+                              <span className="grid-count">{item.count} jobs</span>
+                          </div>
+                      ))}
+                  </div>
+              </div>
+          )}
+        </div>
       </div>
     </div>
   );
