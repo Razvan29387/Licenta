@@ -5,6 +5,7 @@ import org.springframework.data.neo4j.core.schema.Id;
 import org.springframework.data.neo4j.core.schema.Node;
 import org.springframework.data.neo4j.core.schema.Relationship;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Node
@@ -12,29 +13,29 @@ public class Job {
     @Id @GeneratedValue
     private Long id;
 
-    private String adzunaId; // Unique ID from API or local UUID
+    private String adzunaId;
     private String title;
     private String location;
     private String country; 
     private String description;
     private String url;
     private String category;
-    
-    // Câmpuri pentru detalii specifice joburilor
+    private LocalDateTime createdAt;
+
     private String experienceLevel; 
     private List<String> programmingLanguages;
     
-    // Câmpuri pentru salariu
     private Double salaryMin;
     private Double salaryMax;
-    private String salaryPeriod; // e.g., "year", "month", "hour"
+    private String salaryPeriod;
 
     @Relationship(type = "POSTED_BY", direction = Relationship.Direction.OUTGOING)
     private Company company;
 
-    public Job() {}
+    public Job() {
+        this.createdAt = LocalDateTime.now();
+    }
 
-    // Constructor actualizat
     public Job(String adzunaId, String title, String location, String country, String url, String category, String description, Company company) {
         this.adzunaId = adzunaId;
         this.title = title;
@@ -44,9 +45,9 @@ public class Job {
         this.category = category;
         this.description = description;
         this.company = company;
+        this.createdAt = LocalDateTime.now();
     }
 
-    // Getters and Setters
     public Long getId() { return id; }
     public String getAdzunaId() { return adzunaId; }
     public void setAdzunaId(String adzunaId) { this.adzunaId = adzunaId; }
@@ -62,6 +63,8 @@ public class Job {
     public void setUrl(String url) { this.url = url; }
     public String getCategory() { return category; }
     public void setCategory(String category) { this.category = category; }
+    public LocalDateTime getCreatedAt() { return createdAt; }
+    public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
     public String getExperienceLevel() { return experienceLevel; }
     public void setExperienceLevel(String experienceLevel) { this.experienceLevel = experienceLevel; }
     public List<String> getProgrammingLanguages() { return programmingLanguages; }

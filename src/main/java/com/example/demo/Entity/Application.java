@@ -13,7 +13,6 @@ public class Application {
     private String applicantName;
     private String candidateCv;
     
-    // AI Evaluation Fields
     private Integer aiScore;
     private String aiFeedback;
 
@@ -28,7 +27,6 @@ public class Application {
         this.job = job;
     }
 
-    // Getters and Setters
     public Long getId() { return id; }
     public String getApplicantName() { return applicantName; }
     public void setApplicantName(String applicantName) { this.applicantName = applicantName; }

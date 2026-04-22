@@ -6,13 +6,19 @@ import com.example.demo.Repository.CompanyRepository;
 import com.example.demo.Repository.JobRepository;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestTemplate;
 
 import java.util.Optional;
 
 @Service
 public class ArbeitnowIngestionService {
+
+    private static final Logger log = LoggerFactory.getLogger(ArbeitnowIngestionService.class);
 
     private final JobRepository jobRepository;
     private final CompanyRepository companyRepository;
@@ -28,12 +34,14 @@ public class ArbeitnowIngestionService {
         this.objectMapper = new ObjectMapper();
     }
 
+    @Async("taskExecutor") // Rulează această metodă în pool-ul de thread-uri definit
     public void importJobs(int startPage, int endPage) {
-        System.out.println("Starting import from Arbeitnow from page " + startPage + " to " + endPage);
+        log.info("Arbeitnow - Starting IT-only import from page {} to {}", startPage, endPage);
 
         for (int page = startPage; page <= endPage; page++) {
             try {
-                String url = BASE_URL + "?page=" + page;
+                // Added '&search=...' to filter for technology-related jobs
+                String url = BASE_URL + "?page=" + page + "&search=it,software,developer,engineer,data";
                 String jsonResponse = restTemplate.getForObject(url, String.class);
                 JsonNode root = objectMapper.readTree(jsonResponse);
                 JsonNode results = root.path("data");
@@ -44,23 +52,19 @@ public class ArbeitnowIngestionService {
                     }
                 }
 
-                System.out.println("Imported page " + page + " from Arbeitnow");
-
                 // Sleep to be gentle to the API
                 Thread.sleep(1000);
 
             } catch (Exception e) {
-                System.err.println("Error importing Arbeitnow page " + page + ": " + e.getMessage());
+                log.error("Arbeitnow - Error importing page {}: {}", page, e.getMessage());
             }
         }
-        System.out.println("Arbeitnow Import completed.");
+        log.info("Arbeitnow - Import finished.");
     }
 
     private void saveJob(JsonNode jobNode) {
-        // Arbeitnow uses "slug" or "id", we can use "slug" as unique id or combine with a prefix to avoid collisions
         String arbeitnowId = "arbeitnow_" + jobNode.path("slug").asText();
         
-        // Skip if job already exists (re-using adzunaId field as a generic external id field)
         if (jobRepository.existsByAdzunaId(arbeitnowId)) {
             return;
         }
@@ -68,40 +72,32 @@ public class ArbeitnowIngestionService {
         String title = jobNode.path("title").asText();
         String url = jobNode.path("url").asText();
         
-        // Description
-        String description = jobNode.path("description").asText();
-        if (description == null || description.trim().isEmpty() || description.equals("null")) {
-             description = "No description available. Please visit the job link for more details.";
+        String rawDescription = jobNode.path("description").asText();
+        String description = "No description available.";
+        if (rawDescription != null && !rawDescription.trim().isEmpty() && !rawDescription.equals("null")) {
+            description = rawDescription.replaceAll("<[^>]*>", "").trim(); // Simplificat
         }
 
-        // Company
-        String companyName = jobNode.path("company_name").asText();
-        if (companyName == null || companyName.isEmpty() || companyName.equals("null")) {
-             companyName = "Unknown Company";
+        String companyName = jobNode.path("company_name").asText("Unknown Company");
+        
+        // Normalize company name (trim spaces)
+        if (companyName != null) {
+             companyName = companyName.trim();
         }
+
         Company company = findOrCreateCompany(companyName);
 
-        // Location
-        String location = jobNode.path("location").asText();
-        if (location == null || location.isEmpty() || location.equals("null")) {
-             location = "Unknown Location";
-        }
+        String location = jobNode.path("location").asText("Unknown Location");
         
-        // Country
-        // Arbeitnow doesn't always provide a distinct country field outside of location,
-        // but let's try to extract it if available or infer from remote tag.
-        String country = "Unknown Country";
-        boolean isRemote = jobNode.path("remote").asBoolean(false);
-        if (isRemote) {
-            country = "Remote / Global";
+        String country = "Unknown";
+        if (jobNode.path("remote").asBoolean(false)) {
+            country = "Remote";
         } else if (location.contains(",")) {
-             // Heuristic: Often "City, Country"
              String[] parts = location.split(",");
              country = parts[parts.length - 1].trim();
         }
 
-        // Category (Arbeitnow provides tags, we can take the first tag or default)
-        String category = "Uncategorized";
+        String category = "General";
         JsonNode tags = jobNode.path("tags");
         if (tags.isArray() && tags.size() > 0) {
             category = tags.get(0).asText();
@@ -113,12 +109,10 @@ public class ArbeitnowIngestionService {
         jobRepository.save(job);
     }
 
-    private Company findOrCreateCompany(String name) {
-        Optional<Company> existing = companyRepository.findByName(name);
-        if (existing.isPresent()) {
-            return existing.get();
-        }
-        Company newCompany = new Company(name);
-        return companyRepository.save(newCompany);
+    @Transactional
+    protected Company findOrCreateCompany(String name) {
+        // Neo4j lock is acquired or handled safely within @Transactional for concurrency
+        return companyRepository.findByName(name)
+                .orElseGet(() -> companyRepository.save(new Company(name)));
     }
 }

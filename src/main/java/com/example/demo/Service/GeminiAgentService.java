@@ -2,6 +2,7 @@ package com.example.demo.Service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -16,8 +17,8 @@ import java.util.Map;
 @Service
 public class GeminiAgentService {
 
-    // IMPORTANT: Inlocuieste cu cheia ta API reala de la Google Gemini
-    private final String GEMINI_API_KEY = "AIzaSyDrYcwUiBWHiFVObX72QuO5WvYcCSYtyr8";
+    @Value("${gemini.api.key}")
+    private String GEMINI_API_KEY;
     
     // URL-ul pentru modelul Gemini 1.5 Flash (bun pentru text si JSON)
     private final String GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent";
@@ -52,7 +53,7 @@ public class GeminiAgentService {
     }
 
     private String callGemini(String systemInstruction, String userPrompt, boolean requireJson) {
-        if(GEMINI_API_KEY.contains("placeholder")) {
+        if(GEMINI_API_KEY == null || GEMINI_API_KEY.isEmpty() || GEMINI_API_KEY.contains("placeholder")) {
             if(requireJson) {
                 return "{\"score\": 88, \"feedback\": \"Simulated Gemini evaluation: Excellent match on primary skills, but lacks the required cloud experience.\"}";
             } else {
@@ -105,6 +106,7 @@ public class GeminiAgentService {
 
         } catch (Exception e) {
             e.printStackTrace();
+            System.err.println("Gemini API Error: " + e.getMessage());
             if (requireJson) {
                 return "{\"score\": 0, \"feedback\": \"Error connecting to Gemini API.\"}";
             }

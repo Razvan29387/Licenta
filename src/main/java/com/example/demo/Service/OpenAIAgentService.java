@@ -2,6 +2,7 @@ package com.example.demo.Service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -15,8 +16,8 @@ import java.util.Map;
 @Service
 public class OpenAIAgentService {
 
-    // IMPORTANT: Inlocuieste cu cheia ta API reala de la OpenAI sau foloseste variabile de mediu
-    private final String OPENAI_API_KEY = "sk-placeholder-key-replace-me";
+    @Value("${openai.api.key}")
+    private String OPENAI_API_KEY;
     private final String OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
 
     private final RestTemplate restTemplate;
@@ -53,7 +54,7 @@ public class OpenAIAgentService {
     }
 
     private String callOpenAI(String systemPrompt, String userPrompt) {
-        if(OPENAI_API_KEY.contains("placeholder")) {
+        if(OPENAI_API_KEY == null || OPENAI_API_KEY.isEmpty() || OPENAI_API_KEY.contains("placeholder")) {
             return "This is a simulated AI response because the OpenAI API key is missing.\n\n" +
                    "**About the Role**\nWe are looking for a great candidate...\n\n" +
                    "**Responsibilities**\n- Write code\n- Drink coffee\n\n" +
@@ -85,7 +86,7 @@ public class OpenAIAgentService {
     }
 
     private String callOpenAIJSON(String systemPrompt, String userPrompt) {
-         if(OPENAI_API_KEY.contains("placeholder")) {
+         if(OPENAI_API_KEY == null || OPENAI_API_KEY.isEmpty() || OPENAI_API_KEY.contains("placeholder")) {
             return "{\"score\": 85, \"feedback\": \"Simulated evaluation: Strong match on technical skills, but lacks the required years of management experience.\"}";
         }
 

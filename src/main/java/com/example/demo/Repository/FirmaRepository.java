@@ -8,6 +8,5 @@ import org.springframework.stereotype.Repository;
 @Repository
 public interface FirmaRepository extends Neo4jRepository<Firma, Long> {
 
-    // Metodă pentru a găsi o firmă după nume
     Optional<Firma> findByName(String name);
 }

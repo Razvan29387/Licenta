@@ -11,8 +11,11 @@ public class Company {
 
     private String name;
     
-    // Adzuna doesn't always provide the main website, but we can store it if found
     private String website; 
+
+    public Company() {
+        // Constructor gol necesar pentru deserializare JSON
+    }
 
     public Company(String name) {
         this.name = name;

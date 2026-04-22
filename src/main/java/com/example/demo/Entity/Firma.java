@@ -3,11 +3,12 @@ package com.example.demo.Entity;
 import org.springframework.data.neo4j.core.schema.GeneratedValue;
 import org.springframework.data.neo4j.core.schema.Id;
 import org.springframework.data.neo4j.core.schema.Node;
+
 @Node("Firma")
 public class Firma {
-    @Id
-    @GeneratedValue
+    @Id @GeneratedValue
     private Long id;
+    
     private String name;
     private String address;
     private String phone;

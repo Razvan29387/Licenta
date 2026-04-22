@@ -1,11 +1,10 @@
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
-import './App.css'
+import './styles/App.css'
 import Navbar from './components/Navbar';
-import FirmePage from './pages/FirmePage';
-import JobsPage from './pages/JobsPage';
 import DashboardPage from './pages/DashboardPage';
+import JobsPage from './pages/JobsPage';
 import JobDetailsPage from './pages/JobDetailsPage';
-import CompanyProfilePage from './pages/CompanyProfilePage'; // Adăugat!
+import AdminPage from './pages/AdminPage'; // Importă noua pagină
 
 function App() {
   return (
@@ -14,11 +13,9 @@ function App() {
       <div className="container">
         <Routes>
           <Route path="/" element={<DashboardPage />} />
-          <Route path="/firme" element={<FirmePage />} />
           <Route path="/jobs" element={<JobsPage />} />
           <Route path="/jobs/:id" element={<JobDetailsPage />} />
-          {/* RUTA NOUA */}
-          <Route path="/company-dashboard" element={<CompanyProfilePage />} />
+          <Route path="/admin" element={<AdminPage />} /> {/* Adaugă noua rută */}
         </Routes>
       </div>
     </Router>

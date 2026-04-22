@@ -31,7 +31,6 @@ public class ApplicationController {
         this.objectMapper = new ObjectMapper();
     }
 
-    // 1. Endpoint for candidates to submit their application (CV)
     @PostMapping("/job/{jobId}")
     public ResponseEntity<String> submitApplication(@PathVariable Long jobId, @RequestBody SubmitApplicationRequest request) {
         Optional<Job> jobOpt = jobRepository.findById(jobId);
@@ -41,23 +40,13 @@ public class ApplicationController {
 
         Job job = jobOpt.get();
         
-        // Save the raw application first
         Application newApp = new Application(request.getApplicantName(), request.getCandidateCv(), job);
         
-        // Let AI evaluate it immediately in the background before saving
-        String jobDescription = job.getTitle() + "\n" + job.getDescription();
         try {
-            // Get JSON from AI
-            String evaluationJson = aiAgentService.evaluateCandidateCV(jobDescription, request.getCandidateCv());
-            
-            // Parse JSON to extract score and feedback
+            String evaluationJson = aiAgentService.evaluateCandidateCV(job.getTitle() + "\n" + job.getDescription(), request.getCandidateCv());
             JsonNode root = objectMapper.readTree(evaluationJson);
-            if (root.has("score")) {
-                newApp.setAiScore(root.path("score").asInt());
-            }
-            if (root.has("feedback")) {
-                newApp.setAiFeedback(root.path("feedback").asText());
-            }
+            if (root.has("score")) newApp.setAiScore(root.path("score").asInt());
+            if (root.has("feedback")) newApp.setAiFeedback(root.path("feedback").asText());
         } catch (Exception e) {
             System.err.println("Failed to parse AI evaluation: " + e.getMessage());
             newApp.setAiScore(0);
@@ -69,10 +58,8 @@ public class ApplicationController {
         return ResponseEntity.status(HttpStatus.CREATED).body("Application submitted successfully!");
     }
 
-    // 2. Endpoint for Companies to view sorted applications
     @GetMapping("/job/{jobId}")
     public ResponseEntity<List<Application>> getJobApplications(@PathVariable Long jobId) {
-        // Returns the list of applications already sorted by the AI score!
         List<Application> applications = applicationRepository.findByJobIdOrderByAiScoreDesc(jobId);
         return ResponseEntity.ok(applications);
     }
