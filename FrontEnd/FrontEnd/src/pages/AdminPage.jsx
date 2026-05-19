@@ -181,6 +181,12 @@ const AdminPage = () => {
         if (taskName.startsWith('adzuna-')) {
             const countryCode = taskName.substring(7);
             return <h3><span className="flag-emoji" style={{ fontSize: '1.5em', marginRight: '8px' }}>{getFlagForCountry(countryCode)}</span>{taskName}</h3>;
+        } else if (taskName.startsWith('jsearch-')) {
+            return <h3><span className="flag-emoji" style={{ fontSize: '1.5em', marginRight: '8px' }}>🔍</span>{taskName}</h3>;
+        } else if (taskName.startsWith('remotive-')) {
+            return <h3><span className="flag-emoji" style={{ fontSize: '1.5em', marginRight: '8px' }}>🌍</span>{taskName}</h3>;
+        } else if (taskName.startsWith('himalayas-')) {
+            return <h3><span className="flag-emoji" style={{ fontSize: '1.5em', marginRight: '8px' }}>🏔️</span>{taskName}</h3>;
         }
         return <h3><span className="flag-emoji" style={{ fontSize: '1.5em', marginRight: '8px' }}>🤖</span>{taskName}</h3>;
     };
@@ -188,6 +194,9 @@ const AdminPage = () => {
     const getTaskDescription = (taskName) => {
         if (taskName.startsWith('adzuna-')) return `Fetches new job listings from Adzuna for the '${taskName.substring(7).toUpperCase()}' region.`;
         if (taskName === 'arbeitnow') return 'Fetches new job listings from the Arbeitnow general API.';
+        if (taskName === 'jsearch-it') return 'Fetches new IT/Software job listings globally using JSearch API (LinkedIn, Indeed, etc).';
+        if (taskName === 'remotive-software') return 'Fetches full description remote IT/Software jobs globally using Remotive API (No keys required).';
+        if (taskName === 'himalayas-remote') return 'Fetches remote jobs globally from Himalayas App API.';
         return 'A general data import task.';
     };
 

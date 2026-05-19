@@ -40,16 +40,25 @@ public class DataMaintenanceService {
 
     private final AdzunaIngestionService adzunaIngestionService;
     private final ArbeitnowIngestionService arbeitnowIngestionService;
+    private final JsearchIngestionService jsearchIngestionService;
+    private final RemotiveIngestionService remotiveIngestionService;
+    private final HimalayasIngestionService himalayasIngestionService;
     private final JobRepository jobRepository;
     private final ObjectMapper objectMapper;
     private final BatchJobSaverService batchJobSaverService;
 
     public DataMaintenanceService(AdzunaIngestionService adzunaIngestionService,
                                   ArbeitnowIngestionService arbeitnowIngestionService,
+                                  JsearchIngestionService jsearchIngestionService,
+                                  RemotiveIngestionService remotiveIngestionService,
+                                  HimalayasIngestionService himalayasIngestionService,
                                   JobRepository jobRepository,
                                   BatchJobSaverService batchJobSaverService) {
         this.adzunaIngestionService = adzunaIngestionService;
         this.arbeitnowIngestionService = arbeitnowIngestionService;
+        this.jsearchIngestionService = jsearchIngestionService;
+        this.remotiveIngestionService = remotiveIngestionService;
+        this.himalayasIngestionService = himalayasIngestionService;
         this.jobRepository = jobRepository;
         this.batchJobSaverService = batchJobSaverService;
         
@@ -63,6 +72,9 @@ public class DataMaintenanceService {
     public List<String> getAvailableImportTasks() {
         List<String> tasks = new ArrayList<>();
         tasks.add("arbeitnow");
+        tasks.add("jsearch-it");
+        tasks.add("remotive-software");
+        tasks.add("himalayas-remote");
         for (String country : ADZUNA_TARGET_COUNTRIES) {
             tasks.add("adzuna-" + country);
         }
@@ -74,6 +86,13 @@ public class DataMaintenanceService {
         log.info("Executing single task: {}", taskName);
         if ("arbeitnow".equalsIgnoreCase(taskName)) {
             arbeitnowIngestionService.importJobs(1, ARBEITNOW_PAGES_TO_FETCH);
+        } else if ("jsearch-it".equalsIgnoreCase(taskName)) {
+            // REDUCED FOR FREE TIER: 200 requests/month means ~6 pages/day.
+            jsearchIngestionService.importJobs("IT software developer engineer", 20);
+        } else if ("remotive-software".equalsIgnoreCase(taskName)) {
+            remotiveIngestionService.importJobs();
+        } else if ("himalayas-remote".equalsIgnoreCase(taskName)) {
+            himalayasIngestionService.importJobs(100, 0); // initial offset 0
         } else if (taskName.toLowerCase().startsWith("adzuna-")) {
             String countryCode = taskName.substring(7);
             int pagesPerCountry = ADZUNA_DAILY_REQUEST_BUDGET / ADZUNA_TARGET_COUNTRIES.size();

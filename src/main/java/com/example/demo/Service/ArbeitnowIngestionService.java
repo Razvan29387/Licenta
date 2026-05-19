@@ -24,14 +24,16 @@ public class ArbeitnowIngestionService {
     private final CompanyRepository companyRepository;
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;
+    private final BatchJobUpdateService batchJobUpdateService;
 
     private final String BASE_URL = "https://arbeitnow.com/api/job-board-api";
 
-    public ArbeitnowIngestionService(JobRepository jobRepository, CompanyRepository companyRepository) {
+    public ArbeitnowIngestionService(JobRepository jobRepository, CompanyRepository companyRepository, BatchJobUpdateService batchJobUpdateService) {
         this.jobRepository = jobRepository;
         this.companyRepository = companyRepository;
         this.restTemplate = new RestTemplate();
         this.objectMapper = new ObjectMapper();
+        this.batchJobUpdateService = batchJobUpdateService;
     }
 
     @Async("taskExecutor") // Rulează această metodă în pool-ul de thread-uri definit
@@ -48,7 +50,7 @@ public class ArbeitnowIngestionService {
 
                 if (results.isArray()) {
                     for (JsonNode jobNode : results) {
-                        saveJob(jobNode);
+                        saveOrUpdateJob(jobNode);
                     }
                 }
 
@@ -60,23 +62,42 @@ public class ArbeitnowIngestionService {
             }
         }
         log.info("Arbeitnow - Import finished.");
+
+        // Apelează automat batch update-ul pentru a actualiza toți joburile cu remote status și contract type
+        log.info("Arbeitnow - Starting automatic batch update for remote status and contract type...");
+        batchJobUpdateService.updateAllJobsWithRemoteAndContractType();
     }
 
-    private void saveJob(JsonNode jobNode) {
+    private void saveOrUpdateJob(JsonNode jobNode) {
         String arbeitnowId = "arbeitnow_" + jobNode.path("slug").asText();
-        
-        if (jobRepository.existsByAdzunaId(arbeitnowId)) {
-            return;
-        }
-
-        String title = jobNode.path("title").asText();
-        String url = jobNode.path("url").asText();
         
         String rawDescription = jobNode.path("description").asText();
         String description = "No description available.";
         if (rawDescription != null && !rawDescription.trim().isEmpty() && !rawDescription.equals("null")) {
             description = rawDescription.replaceAll("<[^>]*>", "").trim(); // Simplificat
         }
+
+        Optional<Job> existingJobOpt = jobRepository.findByAdzunaId(arbeitnowId);
+
+        if (existingJobOpt.isPresent()) {
+            Job existingJob = existingJobOpt.get();
+            // Dacă ai adăugat compania din Cypher direct pe Job, asigură-te că o re-setezi la update
+            // De asemenea, dacă Job-ul și-a pierdut relația (Company == null), încearcă să o refaci.
+            if (existingJob.getCompany() == null) {
+                String companyName = jobNode.path("company_name").asText("Unknown Company");
+                if (companyName != null) {
+                    companyName = companyName.trim();
+                }
+                Company company = findOrCreateCompany(companyName);
+                existingJob.setCompany(company);
+            }
+            existingJob.setDescription(description);
+            jobRepository.save(existingJob);
+            return;
+        }
+
+        String title = jobNode.path("title").asText();
+        String url = jobNode.path("url").asText();
 
         String companyName = jobNode.path("company_name").asText("Unknown Company");
         

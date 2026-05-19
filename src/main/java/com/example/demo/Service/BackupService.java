@@ -4,6 +4,7 @@ import com.example.demo.Entity.Company;
 import com.example.demo.Entity.Job;
 import com.example.demo.Repository.CompanyRepository;
 import com.example.demo.Repository.JobRepository;
+import jakarta.annotation.PostConstruct;
 import org.neo4j.driver.Driver;
 import org.neo4j.driver.Session;
 import org.slf4j.Logger;
@@ -16,7 +17,10 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.text.SimpleDateFormat;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.Collections;
 import java.util.Date;
 import java.util.List;
@@ -37,6 +41,12 @@ public class BackupService implements DisposableBean {
         this.jobRepository = jobRepository;
         this.companyRepository = companyRepository;
         this.driver = driver;
+    }
+
+    @PostConstruct
+    public void init() {
+        // Run cleanup on application startup as well
+        cleanUpOldBackups();
     }
 
     @Override
@@ -111,7 +121,60 @@ public class BackupService implements DisposableBean {
         }
 
         log.info("Fișier de backup generat în format compatibil: {}", fileName);
+
+        // Clean up old backups after creating a new one
+        cleanUpOldBackups();
+
         return fileName;
+    }
+
+    private void cleanUpOldBackups() {
+        log.info("Starting cleanup of old backup files...");
+        File backupDir = new File(BACKUP_DIR);
+        if (!backupDir.exists() || !backupDir.isDirectory()) {
+            return;
+        }
+
+        Instant threshold = Instant.now().minus(12, ChronoUnit.HOURS);
+        int deletedCount = 0;
+
+        try (Stream<Path> paths = Files.walk(Paths.get(BACKUP_DIR), 1)) {
+            List<Path> oldBackups = paths
+                    .filter(Files::isRegularFile)
+                    .filter(path -> {
+                        String name = path.getFileName().toString();
+                        return name.startsWith("backup_") && name.endsWith(".cypherl");
+                    })
+                    .filter(path -> {
+                        try {
+                            BasicFileAttributes attr = Files.readAttributes(path, BasicFileAttributes.class);
+                            // It's safer to check last modified time in case creation time is altered
+                            return attr.lastModifiedTime().toInstant().isBefore(threshold);
+                        } catch (IOException e) {
+                            log.warn("Could not read attributes for file {}: {}", path, e.getMessage());
+                            return false;
+                        }
+                    })
+                    .collect(Collectors.toList());
+
+            for (Path oldBackup : oldBackups) {
+                try {
+                    Files.delete(oldBackup);
+                    log.info("Deleted old backup file: {}", oldBackup.getFileName());
+                    deletedCount++;
+                } catch (IOException e) {
+                    log.error("Failed to delete old backup file {}: {}", oldBackup.getFileName(), e.getMessage());
+                }
+            }
+        } catch (IOException e) {
+            log.error("Error walking backup directory during cleanup", e);
+        }
+
+        if (deletedCount > 0) {
+            log.info("Finished backup cleanup. Deleted {} old files.", deletedCount);
+        } else {
+            log.info("Finished backup cleanup. No old files found to delete.");
+        }
     }
 
     public void loadBackup(String filename) throws IOException {
@@ -175,7 +238,7 @@ public class BackupService implements DisposableBean {
         try (Stream<Path> paths = Files.walk(Paths.get(BACKUP_DIR), 1)) {
             return paths.filter(Files::isRegularFile)
                     .map(p -> p.getFileName().toString())
-                    .filter(name -> name.startsWith("backup_memgraph_") && name.endsWith(".cypherl"))
+                    .filter(name -> name.startsWith("backup_") && name.endsWith(".cypherl"))
                     .sorted(Collections.reverseOrder())
                     .collect(Collectors.toList());
         } catch (IOException e) {

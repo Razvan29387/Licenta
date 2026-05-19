@@ -7,6 +7,7 @@ const JobsPage = () => {
   const location = useLocation();
   const countryFromState = location.state?.country || '';
   const categoryFromState = location.state?.category || '';
+  const searchFromState = location.state?.search || '';
 
   // --- STATE INITIALIZATION ---
   const [jobs, setJobs] = useState([]);
@@ -18,6 +19,7 @@ const JobsPage = () => {
   const [jobsPerPage] = useState(20);
 
   // State for filters
+  const [searchTerm, setSearchTerm] = useState(searchFromState);
   const [selectedCountry, setSelectedCountry] = useState(countryFromState);
   const [selectedCategory, setSelectedCategory] = useState(categoryFromState);
   // ... other filters can be added here
@@ -29,11 +31,16 @@ const JobsPage = () => {
       const url = new URL('/api/jobs', window.location.origin);
       url.searchParams.append('page', currentPage);
       url.searchParams.append('size', jobsPerPage);
-      if (selectedCountry) {
-        url.searchParams.append('country', selectedCountry);
-      }
-      if (selectedCategory) {
-        url.searchParams.append('category', selectedCategory);
+      
+      if (searchTerm) {
+        url.searchParams.append('search', searchTerm);
+      } else {
+        if (selectedCountry) {
+          url.searchParams.append('country', selectedCountry);
+        }
+        if (selectedCategory) {
+          url.searchParams.append('category', selectedCategory);
+        }
       }
 
       try {
@@ -53,7 +60,7 @@ const JobsPage = () => {
       }
     };
     loadJobs();
-  }, [currentPage, selectedCountry, selectedCategory, jobsPerPage]); // Re-fetch when filters change
+  }, [currentPage, searchTerm, selectedCountry, selectedCategory, jobsPerPage]); // Re-fetch when filters change
 
   // --- HANDLERS ---
   const handlePageChange = (pageNumber) => {
@@ -63,7 +70,7 @@ const JobsPage = () => {
   // Reset page to 0 when filters change
   useEffect(() => {
     setCurrentPage(0);
-  }, [selectedCountry, selectedCategory]);
+  }, [searchTerm, selectedCountry, selectedCategory]);
 
   // --- STYLES ---
   const styles = {
@@ -73,6 +80,7 @@ const JobsPage = () => {
   };
 
   const getHeader = () => {
+    if (searchTerm) return `Search results for "${searchTerm}"`;
     if (selectedCountry) return `Jobs in ${selectedCountry}`;
     if (selectedCategory) return `Jobs in ${selectedCategory}`;
     return 'Find Your Dream Job';
