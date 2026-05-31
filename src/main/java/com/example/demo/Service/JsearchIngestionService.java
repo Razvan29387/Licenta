@@ -211,7 +211,11 @@ public class JsearchIngestionService {
 
     @Transactional
     protected Company findOrCreateCompany(String name) {
-        return companyRepository.findByName(name)
-                .orElseGet(() -> companyRepository.save(new Company(name)));
+        // Normalizăm numele pentru o rezoluție a entităților (Entity Resolution) mai bună
+        // Eliminăm spațiile de la capete și convertim totul la majuscule
+        String normalizedName = name != null ? name.trim().toUpperCase() : "UNKNOWN COMPANY";
+        
+        return companyRepository.findByName(normalizedName)
+                .orElseGet(() -> companyRepository.save(new Company(normalizedName)));
     }
 }

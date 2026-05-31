@@ -43,6 +43,7 @@ public class DataMaintenanceService {
     private final JsearchIngestionService jsearchIngestionService;
     private final RemotiveIngestionService remotiveIngestionService;
     private final HimalayasIngestionService himalayasIngestionService;
+    private final JoobleIngestionService joobleIngestionService;
     private final JobRepository jobRepository;
     private final ObjectMapper objectMapper;
     private final BatchJobSaverService batchJobSaverService;
@@ -52,6 +53,7 @@ public class DataMaintenanceService {
                                   JsearchIngestionService jsearchIngestionService,
                                   RemotiveIngestionService remotiveIngestionService,
                                   HimalayasIngestionService himalayasIngestionService,
+                                  JoobleIngestionService joobleIngestionService,
                                   JobRepository jobRepository,
                                   BatchJobSaverService batchJobSaverService) {
         this.adzunaIngestionService = adzunaIngestionService;
@@ -59,6 +61,7 @@ public class DataMaintenanceService {
         this.jsearchIngestionService = jsearchIngestionService;
         this.remotiveIngestionService = remotiveIngestionService;
         this.himalayasIngestionService = himalayasIngestionService;
+        this.joobleIngestionService = joobleIngestionService;
         this.jobRepository = jobRepository;
         this.batchJobSaverService = batchJobSaverService;
         
@@ -75,6 +78,7 @@ public class DataMaintenanceService {
         tasks.add("jsearch-it");
         tasks.add("remotive-software");
         tasks.add("himalayas-remote");
+        tasks.add("jooble-it");
         for (String country : ADZUNA_TARGET_COUNTRIES) {
             tasks.add("adzuna-" + country);
         }
@@ -93,6 +97,8 @@ public class DataMaintenanceService {
             remotiveIngestionService.importJobs();
         } else if ("himalayas-remote".equalsIgnoreCase(taskName)) {
             himalayasIngestionService.importJobs(100, 0); // initial offset 0
+        } else if ("jooble-it".equalsIgnoreCase(taskName)) {
+            joobleIngestionService.importJobs("IT", null, 5);
         } else if (taskName.toLowerCase().startsWith("adzuna-")) {
             String countryCode = taskName.substring(7);
             int pagesPerCountry = ADZUNA_DAILY_REQUEST_BUDGET / ADZUNA_TARGET_COUNTRIES.size();

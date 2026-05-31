@@ -1,5 +1,6 @@
 package com.example.demo.Controller;
 
+import com.example.demo.Entity.Application;
 import com.example.demo.Entity.Company;
 import com.example.demo.Entity.Job;
 import com.example.demo.Repository.ApplicationRepository;
@@ -91,6 +92,12 @@ public class JobController {
         return ResponseEntity.notFound().build();
     }
 
+    @GetMapping("/jobs/{id}/applications")
+    public ResponseEntity<List<Application>> getJobApplications(@PathVariable Long id) {
+        List<Application> applications = applicationRepository.findByJobIdOrderByAiScoreDesc(id);
+        return ResponseEntity.ok(applications);
+    }
+
     @PostMapping("/jobs")
     public ResponseEntity<Job> createJob(@RequestBody JobRequestDTO jobRequest) {
         Company company = companyRepository.findByName(jobRequest.getCompanyName())
@@ -119,6 +126,26 @@ public class JobController {
         Job savedJob = jobRepository.save(newJob);
 
         return ResponseEntity.status(HttpStatus.CREATED).body(savedJob);
+    }
+
+    @PutMapping("/jobs/{id}")
+    public ResponseEntity<Job> updateJob(@PathVariable Long id, @RequestBody JobRequestDTO jobRequest) {
+        Optional<Job> jobOptional = jobRepository.findById(id);
+        if (jobOptional.isEmpty()) {
+            return ResponseEntity.notFound().build();
+        }
+
+        Job job = jobOptional.get();
+        job.setTitle(jobRequest.getTitle());
+        job.setDescription(jobRequest.getDescription());
+        job.setLocation(jobRequest.getLocation());
+        job.setCountry(jobRequest.getCountry());
+        job.setCategory(jobRequest.getCategory());
+        job.setExperienceLevel(jobRequest.getExperienceLevel());
+        job.setProgrammingLanguages(jobRequest.getProgrammingLanguages());
+
+        Job updatedJob = jobRepository.save(job);
+        return ResponseEntity.ok(updatedJob);
     }
 
     @GetMapping("/stats")
@@ -153,12 +180,27 @@ public class JobController {
             jobsByCategory.add((Map<String, Object>) m);
         }
 
+        String languageQuery = "MATCH (j:Job) WHERE j.category = 'IT' AND j.programmingLanguages IS NOT NULL " +
+                "UNWIND j.programmingLanguages AS language " +
+                "RETURN language, count(j) AS count ORDER BY count DESC LIMIT 10";
+
+        Collection<Map> languageData = neo4jClient.query(languageQuery)
+                .fetchAs(Map.class)
+                .mappedBy((typeSystem, record) -> Map.of("language", record.get("language").asString(), "count", record.get("count").asLong()))
+                .all();
+
+        List<Map<String, Object>> jobsByLanguage = new ArrayList<>();
+        for (Map m : languageData) {
+            jobsByLanguage.add((Map<String, Object>) m);
+        }
+
         Map<String, Object> stats = new HashMap<>();
         stats.put("totalJobs", totalJobs);
         stats.put("totalCompanies", totalCompanies);
         stats.put("totalApplications", totalApplications);
         stats.put("jobsByCountry", jobsByCountry);
         stats.put("jobsByCategory", jobsByCategory);
+        stats.put("jobsByLanguage", jobsByLanguage);
 
         return ResponseEntity.ok(stats);
     }

@@ -8,7 +8,8 @@ const DashboardPage = () => {
     totalCompanies: 0, 
     totalApplications: 0, 
     jobsByCountry: [],
-    jobsByCategory: [] 
+    jobsByCategory: [],
+    jobsByLanguage: []
   });
   const [searchTerm, setSearchTerm] = useState('');
   const navigate = useNavigate();
@@ -24,7 +25,8 @@ const DashboardPage = () => {
               totalCompanies: data.totalCompanies || 0,
               totalApplications: data.totalApplications || 0,
               jobsByCountry: data.jobsByCountry || [],
-              jobsByCategory: data.jobsByCategory || []
+              jobsByCategory: data.jobsByCategory || [],
+              jobsByLanguage: data.jobsByLanguage || []
           });
         }
       } catch (error) {
@@ -103,6 +105,19 @@ const DashboardPage = () => {
     if (lowerCat.includes('admin') || lowerCat.includes('office')) return '🗄️';
     if (lowerCat.includes('health') || lowerCat.includes('medic')) return '⚕️';
     return '📁'; // Fallback
+  };
+
+  const getIconForLanguage = (languageName) => {
+    if (!languageName) return '⌨️';
+    const lowerLang = languageName.toLowerCase();
+    if (lowerLang.includes('java') || lowerLang.includes('kotlin') || lowerLang.includes('scala')) return '☕';
+    if (lowerLang.includes('python')) return '🐍';
+    if (lowerLang.includes('javascript') || lowerLang.includes('js') || lowerLang.includes('node') || lowerLang.includes('typescript')) return '📜';
+    if (lowerLang.includes('c#') || lowerLang.includes('.net') || lowerLang.includes('c++') || lowerLang.includes('c')) return '⚙️';
+    if (lowerLang.includes('php') || lowerLang.includes('ruby')) return '🐘';
+    if (lowerLang.includes('go') || lowerLang.includes('rust')) return '🚀';
+    if (lowerLang.includes('sql') || lowerLang.includes('database')) return '🗄️';
+    return '⌨️'; // Fallback
   };
 
   return (
@@ -186,6 +201,27 @@ const DashboardPage = () => {
                           >
                               <span>{getIconForCategory(item.category)}</span>
                               <span className="grid-name">{item.category}</span>
+                              <span className="grid-count">{item.count} jobs</span>
+                          </div>
+                      ))}
+                  </div>
+              </div>
+          )}
+
+          {stats.jobsByLanguage && stats.jobsByLanguage.length > 0 && (
+              <div className="stats-grid-section">
+                  <h3 className="grid-title">
+                      Popular Programming Languages
+                  </h3>
+                  <div className="grid">
+                      {stats.jobsByLanguage.map((item, index) => (
+                          <div 
+                              key={`language-${index}`} 
+                              className="grid-card"
+                              onClick={() => handleFilterClick('search', item.language)}
+                          >
+                              <span>{getIconForLanguage(item.language)}</span>
+                              <span className="grid-name">{item.language}</span>
                               <span className="grid-count">{item.count} jobs</span>
                           </div>
                       ))}

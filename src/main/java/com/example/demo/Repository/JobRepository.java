@@ -35,6 +35,9 @@ public interface JobRepository extends Neo4jRepository<Job, Long> {
     @Query("MATCH (j:Job)-[:POSTED_BY]->(c:Company) WHERE c.name = $companyName RETURN j, c")
     List<Job> findByCompanyName(@Param("companyName") String companyName);
 
+    @Query("MATCH (j:Job)-[:POSTED_BY]->(c:Company) WHERE id(c) = $companyId RETURN j")
+    List<Job> findByCompanyId(@Param("companyId") Long companyId);
+
     @Query("MATCH (j:Job) RETURN count(j)")
     long countJobs();
 
