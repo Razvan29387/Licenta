@@ -13,6 +13,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestTemplate;
 
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.Optional;
 
 @Service
@@ -24,26 +27,27 @@ public class ArbeitnowIngestionService {
     private final CompanyRepository companyRepository;
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;
-    private final BatchJobUpdateService batchJobUpdateService;
+    private final EntityResolutionService entityResolutionService;
 
-    private final String BASE_URL = "https://arbeitnow.com/api/job-board-api";
+    private final String BASE_URL = "https://www.arbeitnow.com/api/job-board-api";
 
-    public ArbeitnowIngestionService(JobRepository jobRepository, CompanyRepository companyRepository, BatchJobUpdateService batchJobUpdateService) {
+    public ArbeitnowIngestionService(JobRepository jobRepository, CompanyRepository companyRepository, EntityResolutionService entityResolutionService) {
         this.jobRepository = jobRepository;
         this.companyRepository = companyRepository;
         this.restTemplate = new RestTemplate();
         this.objectMapper = new ObjectMapper();
-        this.batchJobUpdateService = batchJobUpdateService;
+        this.entityResolutionService = entityResolutionService;
     }
 
-    @Async("taskExecutor") // Rulează această metodă în pool-ul de thread-uri definit
+    @Async("taskExecutor")
     public void importJobs(int startPage, int endPage) {
-        log.info("Arbeitnow - Starting IT-only import from page {} to {}", startPage, endPage);
+        log.info("Arbeitnow - Starting import from page {} to {}", startPage, endPage);
 
         for (int page = startPage; page <= endPage; page++) {
             try {
                 // Added '&search=...' to filter for technology-related jobs
                 String url = BASE_URL + "?page=" + page + "&search=it,software,developer,engineer,data";
+                
                 String jsonResponse = restTemplate.getForObject(url, String.class);
                 JsonNode root = objectMapper.readTree(jsonResponse);
                 JsonNode results = root.path("data");
@@ -54,7 +58,6 @@ public class ArbeitnowIngestionService {
                     }
                 }
 
-                // Sleep to be gentle to the API
                 Thread.sleep(1000);
 
             } catch (Exception e) {
@@ -62,78 +65,70 @@ public class ArbeitnowIngestionService {
             }
         }
         log.info("Arbeitnow - Import finished.");
-
-        // Apelează automat batch update-ul pentru a actualiza toți joburile cu remote status și contract type
-        log.info("Arbeitnow - Starting automatic batch update for remote status and contract type...");
-        batchJobUpdateService.updateAllJobsWithRemoteAndContractType();
     }
 
     private void saveOrUpdateJob(JsonNode jobNode) {
-        String arbeitnowId = "arbeitnow_" + jobNode.path("slug").asText();
-        
-        String rawDescription = jobNode.path("description").asText();
-        String description = "No description available.";
-        if (rawDescription != null && !rawDescription.trim().isEmpty() && !rawDescription.equals("null")) {
-            description = rawDescription.replaceAll("<[^>]*>", "").trim(); // Simplificat
-        }
-
-        Optional<Job> existingJobOpt = jobRepository.findByAdzunaId(arbeitnowId);
-
-        if (existingJobOpt.isPresent()) {
-            Job existingJob = existingJobOpt.get();
-            // Dacă ai adăugat compania din Cypher direct pe Job, asigură-te că o re-setezi la update
-            // De asemenea, dacă Job-ul și-a pierdut relația (Company == null), încearcă să o refaci.
-            if (existingJob.getCompany() == null) {
-                String companyName = jobNode.path("company_name").asText("Unknown Company");
-                if (companyName != null) {
-                    companyName = companyName.trim();
-                }
-                Company company = findOrCreateCompany(companyName);
-                existingJob.setCompany(company);
-            }
-            existingJob.setDescription(description);
-            jobRepository.save(existingJob);
+        String slug = jobNode.path("slug").asText();
+        if (slug.isEmpty()) {
+            log.warn("Arbeitnow - Skipped job with empty slug.");
             return;
         }
 
-        String title = jobNode.path("title").asText();
-        String url = jobNode.path("url").asText();
+        String companyName = jobNode.path("company_name").asText("Unknown Company").trim();
+        Company company = entityResolutionService.findOrCreateCompany(companyName);
 
-        String companyName = jobNode.path("company_name").asText("Unknown Company");
-        
-        // Normalize company name (trim spaces)
-        if (companyName != null) {
-             companyName = companyName.trim();
+        Optional<Job> existingJobOpt = jobRepository.findByAdzunaId(slug);
+        Job job;
+
+        if (existingJobOpt.isPresent()) {
+            job = existingJobOpt.get();
+            job.setCompany(company);
+        } else {
+            String title = jobNode.path("title").asText();
+            String url = jobNode.path("url").asText();
+            String location = jobNode.path("location").asText("Unknown Location");
+            String description = jobNode.path("description").asText("No description available.");
+
+            job = new Job(slug, title, location, "Unknown", url, "IT/Software", description, company);
         }
 
-        Company company = findOrCreateCompany(companyName);
-
-        String location = jobNode.path("location").asText("Unknown Location");
-        
-        String country = "Unknown";
-        if (jobNode.path("remote").asBoolean(false)) {
-            country = "Remote";
-        } else if (location.contains(",")) {
-             String[] parts = location.split(",");
-             country = parts[parts.length - 1].trim();
+        if (jobNode.has("description") && !jobNode.get("description").isNull()) {
+            job.setDescription(jobNode.path("description").asText());
+        }
+        if (jobNode.has("title") && !jobNode.get("title").isNull()) {
+            job.setTitle(jobNode.path("title").asText());
+        }
+        if (jobNode.has("location") && !jobNode.get("location").isNull()) {
+            job.setLocation(jobNode.path("location").asText());
         }
 
-        String category = "General";
-        JsonNode tags = jobNode.path("tags");
-        if (tags.isArray() && tags.size() > 0) {
-            category = tags.get(0).asText();
+        if (jobNode.has("job_types") && jobNode.get("job_types").isArray()) {
+            JsonNode jobTypes = jobNode.get("job_types");
+            if (jobTypes.size() > 0) {
+                job.setContractType(jobTypes.get(0).asText());
+            }
         }
 
-        Job job = new Job(arbeitnowId, title, location, country, url, category, description, company);
-        job.setCompany(company);
+        if (jobNode.has("remote") && !jobNode.get("remote").isNull()) {
+            job.setJobIsRemote(jobNode.path("remote").asBoolean());
+        }
+
+        if (jobNode.has("created_at") && !jobNode.get("created_at").isNull()) {
+            try {
+                long timestamp = jobNode.path("created_at").asLong();
+                LocalDateTime ldt = LocalDateTime.ofInstant(Instant.ofEpochSecond(timestamp), ZoneOffset.UTC);
+                job.setCreatedDate(ldt);
+            } catch (Exception e) {
+                log.warn("Arbeitnow - Could not parse created date for job {}: {}", slug, e.getMessage());
+            }
+        }
+
+        job.setCompanyName(company.getName());
+
+        if (job.getCreatedAt() == null) {
+            job.setCreatedAt(LocalDateTime.now());
+        }
 
         jobRepository.save(job);
-    }
-
-    @Transactional
-    protected Company findOrCreateCompany(String name) {
-        // Neo4j lock is acquired or handled safely within @Transactional for concurrency
-        return companyRepository.findByName(name)
-                .orElseGet(() -> companyRepository.save(new Company(name)));
     }
 }

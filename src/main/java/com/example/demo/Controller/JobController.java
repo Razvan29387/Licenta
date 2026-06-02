@@ -8,6 +8,7 @@ import com.example.demo.Repository.CompanyRepository;
 import com.example.demo.Repository.JobRepository;
 import com.example.demo.Request_DTO.JobRequestDTO;
 import com.example.demo.Service.BatchJobUpdateService;
+import com.example.demo.Service.EntityResolutionService;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -32,19 +33,19 @@ import java.util.ArrayList;
 public class JobController {
 
     private final JobRepository jobRepository;
-    private final CompanyRepository companyRepository;
     private final ApplicationRepository applicationRepository;
     private final Neo4jClient neo4jClient;
     private final BatchJobUpdateService batchJobUpdateService;
+    private final EntityResolutionService entityResolutionService;
 
-    public JobController(JobRepository jobRepository, CompanyRepository companyRepository,
+    public JobController(JobRepository jobRepository,
                          ApplicationRepository applicationRepository, Neo4jClient neo4jClient,
-                         BatchJobUpdateService batchJobUpdateService) {
+                         BatchJobUpdateService batchJobUpdateService, EntityResolutionService entityResolutionService) {
         this.jobRepository = jobRepository;
-        this.companyRepository = companyRepository;
         this.applicationRepository = applicationRepository;
         this.neo4jClient = neo4jClient;
         this.batchJobUpdateService = batchJobUpdateService;
+        this.entityResolutionService = entityResolutionService;
     }
 
     @GetMapping("/jobs")
@@ -100,11 +101,8 @@ public class JobController {
 
     @PostMapping("/jobs")
     public ResponseEntity<Job> createJob(@RequestBody JobRequestDTO jobRequest) {
-        Company company = companyRepository.findByName(jobRequest.getCompanyName())
-                .orElseGet(() -> {
-                    Company newCompany = new Company(jobRequest.getCompanyName());
-                    return companyRepository.save(newCompany);
-                });
+        // Use the entity resolution service to find or create the company
+        Company company = entityResolutionService.findOrCreateCompany(jobRequest.getCompanyName());
 
         String generatedId = "local_" + UUID.randomUUID().toString();
 
@@ -121,7 +119,7 @@ public class JobController {
 
         newJob.setExperienceLevel(jobRequest.getExperienceLevel());
         newJob.setProgrammingLanguages(jobRequest.getProgrammingLanguages());
-        newJob.setCompanyName(jobRequest.getCompanyName());
+        newJob.setCompanyName(company.getName()); // Use the resolved company name
 
         Job savedJob = jobRepository.save(newJob);
 
@@ -143,6 +141,11 @@ public class JobController {
         job.setCategory(jobRequest.getCategory());
         job.setExperienceLevel(jobRequest.getExperienceLevel());
         job.setProgrammingLanguages(jobRequest.getProgrammingLanguages());
+
+        // Also update the company if the name has changed, using the resolution service
+        Company company = entityResolutionService.findOrCreateCompany(jobRequest.getCompanyName());
+        job.setCompany(company);
+        job.setCompanyName(company.getName());
 
         Job updatedJob = jobRepository.save(job);
         return ResponseEntity.ok(updatedJob);

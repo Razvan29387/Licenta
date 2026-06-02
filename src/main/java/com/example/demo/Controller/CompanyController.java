@@ -4,6 +4,7 @@ import com.example.demo.Entity.Company;
 import com.example.demo.Entity.Job;
 import com.example.demo.Repository.CompanyRepository;
 import com.example.demo.Repository.JobRepository;
+import com.example.demo.Service.EntityResolutionService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -17,10 +18,12 @@ public class CompanyController {
 
     private final CompanyRepository companyRepository;
     private final JobRepository jobRepository;
+    private final EntityResolutionService entityResolutionService;
 
-    public CompanyController(CompanyRepository companyRepository, JobRepository jobRepository) {
+    public CompanyController(CompanyRepository companyRepository, JobRepository jobRepository, EntityResolutionService entityResolutionService) {
         this.companyRepository = companyRepository;
         this.jobRepository = jobRepository;
+        this.entityResolutionService = entityResolutionService;
     }
 
     @GetMapping("/{id}")
@@ -32,9 +35,9 @@ public class CompanyController {
 
     @GetMapping("/search")
     public ResponseEntity<Company> searchCompanyByName(@RequestParam String name) {
-        Optional<Company> company = companyRepository.findByName(name.toUpperCase());
-        return company.map(ResponseEntity::ok)
-                .orElseGet(() -> ResponseEntity.notFound().build());
+        // Use EntityResolutionService to search and resolve the company correctly
+        Company company = entityResolutionService.findOrCreateCompany(name);
+        return ResponseEntity.ok(company);
     }
 
     @PostMapping("/find-or-create")
@@ -44,9 +47,8 @@ public class CompanyController {
             return ResponseEntity.badRequest().build();
         }
         
-        String normalizedName = name.trim().toUpperCase();
-        Company company = companyRepository.findByName(normalizedName)
-                .orElseGet(() -> companyRepository.save(new Company(normalizedName)));
+        // Use the new deduplication algorithm
+        Company company = entityResolutionService.findOrCreateCompany(name);
                 
         return ResponseEntity.ok(company);
     }

@@ -14,9 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestTemplate;
 
 import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
-import java.util.List;
+import java.time.OffsetDateTime;
 import java.util.Optional;
 
 @Service
@@ -28,145 +26,127 @@ public class RemotiveIngestionService {
     private final CompanyRepository companyRepository;
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;
+    private final EntityResolutionService entityResolutionService;
 
-    // We focus on the Software Development category for relevance
+    // Folosim categoria "software-dev" pentru a aduce doar joburi IT
     private final String BASE_URL = "https://remotive.com/api/remote-jobs?category=software-dev";
 
-    public RemotiveIngestionService(JobRepository jobRepository, CompanyRepository companyRepository) {
+    public RemotiveIngestionService(JobRepository jobRepository, CompanyRepository companyRepository, EntityResolutionService entityResolutionService) {
         this.jobRepository = jobRepository;
         this.companyRepository = companyRepository;
         this.restTemplate = new RestTemplate();
         this.objectMapper = new ObjectMapper();
+        this.entityResolutionService = entityResolutionService;
     }
 
+    /**
+     * Importă toate joburile (API-ul Remotive returnează toate joburile
+     * pentru categoria respectivă într-un singur request, nu are paginare
+     * în acest endpoint).
+     */
     @Async("taskExecutor")
     public void importJobs() {
-        log.info("Remotive - Starting import for IT/Software remote jobs");
+        log.info("Remotive - Starting import for category 'software-dev'");
 
         try {
-            // Remotive returns all jobs for a category in a single, large response, not paginated.
             String jsonResponse = restTemplate.getForObject(BASE_URL, String.class);
             JsonNode root = objectMapper.readTree(jsonResponse);
-            JsonNode jobsArray = root.path("jobs");
+            JsonNode jobsNode = root.path("jobs");
 
-            if (jobsArray.isArray()) {
-                int count = 0;
-                log.info("Remotive - Found {} jobs in the response. Starting processing...", jobsArray.size());
-                
-                for (JsonNode jobNode : jobsArray) {
-                    saveOrUpdateJob(jobNode);
-                    count++;
-                    
-                    // Small sleep to not overwhelm the database with thousands of rapid writes
-                    if (count % 50 == 0) {
-                        Thread.sleep(500); 
+            if (jobsNode.isArray()) {
+                int savedCount = 0;
+                for (JsonNode jobNode : jobsNode) {
+                    if (saveOrUpdateJob(jobNode)) {
+                        savedCount++;
                     }
                 }
-                log.info("Remotive - Successfully processed {} jobs.", count);
+                log.info("Remotive - Saved/Updated {} jobs.", savedCount);
             } else {
-                 log.warn("Remotive - 'jobs' element in response is not an array.");
+                log.warn("Remotive - Received response without 'jobs' array.");
             }
 
         } catch (Exception e) {
-            log.error("Remotive - Error importing jobs: {}", e.getMessage(), e);
+            log.error("Remotive - Error during import: {}", e.getMessage(), e);
         }
+
         log.info("Remotive - Import finished.");
     }
 
-    private void saveOrUpdateJob(JsonNode jobNode) {
-        String remotiveId = "remotive_" + jobNode.path("id").asText();
-        
-        if (remotiveId.equals("remotive_null") || remotiveId.isEmpty()) {
-            return;
+    private boolean saveOrUpdateJob(JsonNode jobNode) {
+        String jobId = jobNode.path("id").asText();
+
+        if (jobId == null || jobId.isEmpty() || jobId.equals("null")) {
+            log.warn("Remotive - Skipped job with missing ID");
+            return false;
         }
 
-        // --- Extragere Companie ---
         String companyName = jobNode.path("company_name").asText("Unknown Company").trim();
-        Company company = findOrCreateCompany(companyName);
-        
-        // Dacă API-ul oferă logo, îl putem adăuga la companie pe viitor
+        Company company = entityResolutionService.findOrCreateCompany(companyName);
 
-        // --- Verificare Job Existent ---
-        Optional<Job> existingJobOpt = jobRepository.findByAdzunaId(remotiveId);
+        Optional<Job> existingJobOpt = jobRepository.findByAdzunaId(jobId);
         Job job;
 
         if (existingJobOpt.isPresent()) {
             job = existingJobOpt.get();
-            job.setCompany(company); // Asigurăm relația
+            job.setCompany(company);
         } else {
-            // Instanțiere Job Nou
             String title = jobNode.path("title").asText("Untitled Job");
             String url = jobNode.path("url").asText("");
             
-            // Remotive jobs are remote, but they might specify allowed regions (e.g. "Worldwide", "USA Only")
-            String candidateRequiredLocation = jobNode.path("candidate_required_location").asText("");
-            String country = "Remote"; 
-            String location = candidateRequiredLocation.isEmpty() ? "Worldwide" : candidateRequiredLocation;
+            // Candidate required location (poate fi gol, "Worldwide", etc.)
+            String location = jobNode.path("candidate_required_location").asText("");
+            if (location.isEmpty() || location.equals("null")) location = "Worldwide";
             
             String category = jobNode.path("category").asText("IT/Software");
-            String description = "No description available.";
+            String description = jobNode.path("description").asText("No description available.");
 
-            job = new Job(remotiveId, title, location, country, url, category, description, company);
-            job.setJobIsRemote(true); // By definition, Remotive jobs are remote
+            job = new Job(jobId, title, location, "Unknown", url, category, description, company);
         }
 
-        // --- ACTUALIZARE CÂMPURI ---
-
-        // Descriere Completă (Remotive dă un HTML lung și frumos)
+        // --- UPDATE CÂMPURI ---
         if (jobNode.has("description") && !jobNode.get("description").isNull()) {
-            String rawDesc = jobNode.path("description").asText();
-            // Aici nu mai ștergem HTML-ul complet ca la Arbeitnow, pentru că s-ar putea 
-            // ca acel coleg să aibă nevoie de structură (ex: <ul><li>) pentru analiză mai bună.
-            // Doar tăiem spațiile goale.
-            job.setDescription(rawDesc.trim());
+            job.setDescription(jobNode.path("description").asText());
         }
-        
         if (jobNode.has("title") && !jobNode.get("title").isNull()) {
             job.setTitle(jobNode.path("title").asText());
         }
+        if (jobNode.has("candidate_required_location") && !jobNode.get("candidate_required_location").isNull()) {
+             job.setLocation(jobNode.path("candidate_required_location").asText());
+        }
 
-        // Tip Contract
         if (jobNode.has("job_type") && !jobNode.get("job_type").isNull()) {
-            // Remotive usually returns strings like "full_time", "contract", etc.
-            job.setContractType(jobNode.path("job_type").asText());
-        }
-        
-        // Tag-uri
-        JsonNode tagsNode = jobNode.path("tags");
-        if (tagsNode.isArray() && tagsNode.size() > 0) {
-            List<String> tags = new ArrayList<>();
-            for (JsonNode tag : tagsNode) {
-                tags.add(tag.asText());
-            }
-            // Putem salva tag-urile ca programmingLanguages temporar pentru a fi extrase de coleg
-            job.setProgrammingLanguages(tags);
+            // Remotive returnează "full_time", "contract", etc. Le putem curăța.
+            String type = jobNode.path("job_type").asText().replace("_", " ");
+            job.setContractType(type);
         }
 
-        // Data Creării (Format: 2023-11-21T10:45:00)
+        if (jobNode.has("salary") && !jobNode.get("salary").isNull() && !jobNode.get("salary").asText().isEmpty()) {
+            job.setSalaryPeriod(jobNode.path("salary").asText()); // Remotive dă salariul ca un string "100k - 120k"
+        }
+
+        // Remotive jobs sunt remote.
+        job.setJobIsRemote(true);
+
         if (jobNode.has("publication_date") && !jobNode.get("publication_date").isNull()) {
-            try {
-                String pubDateStr = jobNode.path("publication_date").asText();
-                if (pubDateStr.length() >= 19) {
-                    LocalDateTime ldt = LocalDateTime.parse(pubDateStr.substring(0, 19));
-                    job.setCreatedDate(ldt);
+             try {
+                // "2024-05-19T06:40:27"
+                String dateStr = jobNode.path("publication_date").asText();
+                if(dateStr.length() >= 19) {
+                     LocalDateTime ldt = LocalDateTime.parse(dateStr.substring(0, 19));
+                     job.setCreatedDate(ldt);
                 }
-            } catch (Exception e) {
-                log.warn("Remotive - Could not parse publication date: {}", e.getMessage());
-            }
+             } catch (Exception e) {
+                 log.warn("Remotive - Could not parse publication date: {}", e.getMessage());
+             }
         }
 
-        job.setCompanyName(companyName);
+        job.setCompanyName(company.getName());
 
         if (job.getCreatedAt() == null) {
             job.setCreatedAt(LocalDateTime.now());
         }
 
         jobRepository.save(job);
-    }
-
-    @Transactional
-    protected Company findOrCreateCompany(String name) {
-        return companyRepository.findByName(name)
-                .orElseGet(() -> companyRepository.save(new Company(name)));
+        return true;
     }
 }

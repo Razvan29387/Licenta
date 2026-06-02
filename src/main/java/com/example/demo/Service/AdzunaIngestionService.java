@@ -29,6 +29,7 @@ public class AdzunaIngestionService {
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;
     private final BatchJobUpdateService batchJobUpdateService;
+    private final EntityResolutionService entityResolutionService;
 
     @Value("${adzuna.api.id}")
     private String APP_ID;
@@ -38,12 +39,13 @@ public class AdzunaIngestionService {
 
     private final String BASE_URL = "https://api.adzuna.com/v1/api/jobs";
 
-    public AdzunaIngestionService(JobRepository jobRepository, CompanyRepository companyRepository, BatchJobUpdateService batchJobUpdateService) {
+    public AdzunaIngestionService(JobRepository jobRepository, CompanyRepository companyRepository, BatchJobUpdateService batchJobUpdateService, EntityResolutionService entityResolutionService) {
         this.jobRepository = jobRepository;
         this.companyRepository = companyRepository;
         this.restTemplate = new RestTemplate();
         this.objectMapper = new ObjectMapper();
         this.batchJobUpdateService = batchJobUpdateService;
+        this.entityResolutionService = entityResolutionService;
     }
 
     @Async("taskExecutor")
@@ -81,9 +83,9 @@ public class AdzunaIngestionService {
     private void saveOrUpdateJob(JsonNode jobNode, String countryCode) {
         String adzunaId = jobNode.path("id").asText();
 
-        // 1. Găsim compania (o creăm dacă nu există)
+        // 1. Găsim compania folosind EntityResolutionService
         String companyName = jobNode.path("company").path("display_name").asText("Unknown Company").trim();
-        Company company = findOrCreateCompany(companyName);
+        Company company = entityResolutionService.findOrCreateCompany(companyName);
 
         // 2. Verificăm dacă jobul există deja
         Optional<Job> existingJobOpt = jobRepository.findByAdzunaId(adzunaId);
@@ -177,7 +179,7 @@ public class AdzunaIngestionService {
             }
         }
 
-        job.setCompanyName(companyName);
+        job.setCompanyName(company.getName()); // Use the resolved name
 
         // Ensure createdAt is set to the current time (for new jobs or updates)
         if (job.getCreatedAt() == null) {
@@ -186,11 +188,5 @@ public class AdzunaIngestionService {
 
         // 4. Salvare în baza de date (dacă e job vechi va face UPDATE, dacă e nou va face INSERT)
         jobRepository.save(job);
-    }
-
-    @Transactional
-    protected Company findOrCreateCompany(String name) {
-        return companyRepository.findByName(name)
-                .orElseGet(() -> companyRepository.save(new Company(name)));
     }
 }

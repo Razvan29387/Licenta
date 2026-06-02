@@ -32,17 +32,19 @@ public class JoobleIngestionService {
     private final CompanyRepository companyRepository;
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;
+    private final EntityResolutionService entityResolutionService;
 
     @Value("${jooble.api.key}")
     private String API_KEY;
 
     private final String BASE_URL = "https://jooble.org/api/";
 
-    public JoobleIngestionService(JobRepository jobRepository, CompanyRepository companyRepository) {
+    public JoobleIngestionService(JobRepository jobRepository, CompanyRepository companyRepository, EntityResolutionService entityResolutionService) {
         this.jobRepository = jobRepository;
         this.companyRepository = companyRepository;
         this.restTemplate = new RestTemplate();
         this.objectMapper = new ObjectMapper();
+        this.entityResolutionService = entityResolutionService;
     }
 
     @Async("taskExecutor")
@@ -123,7 +125,7 @@ public class JoobleIngestionService {
             companyName = "Unknown Company";
         }
         
-        Company company = findOrCreateCompany(companyName);
+        Company company = entityResolutionService.findOrCreateCompany(companyName);
 
         Optional<Job> existingJobOpt = jobRepository.findByAdzunaId(jobId);
         Job job;
@@ -167,7 +169,7 @@ public class JoobleIngestionService {
             }
         }
 
-        job.setCompanyName(companyName);
+        job.setCompanyName(company.getName());
 
         if (job.getCreatedAt() == null) {
             job.setCreatedAt(LocalDateTime.now());
@@ -175,11 +177,5 @@ public class JoobleIngestionService {
 
         jobRepository.save(job);
         return true;
-    }
-
-    @Transactional
-    protected Company findOrCreateCompany(String name) {
-        return companyRepository.findByName(name)
-                .orElseGet(() -> companyRepository.save(new Company(name)));
     }
 }

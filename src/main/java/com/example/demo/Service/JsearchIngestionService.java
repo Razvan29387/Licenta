@@ -21,9 +21,6 @@ import org.springframework.web.client.RestTemplate;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Optional;
 
 @Service
@@ -36,6 +33,7 @@ public class JsearchIngestionService {
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;
     private final BatchJobUpdateService batchJobUpdateService;
+    private final EntityResolutionService entityResolutionService;
 
     @Value("${jsearch.api.key}")
     private String API_KEY;
@@ -45,12 +43,13 @@ public class JsearchIngestionService {
 
     private final String BASE_URL = "https://jsearch.p.rapidapi.com/search";
 
-    public JsearchIngestionService(JobRepository jobRepository, CompanyRepository companyRepository, BatchJobUpdateService batchJobUpdateService) {
+    public JsearchIngestionService(JobRepository jobRepository, CompanyRepository companyRepository, BatchJobUpdateService batchJobUpdateService, EntityResolutionService entityResolutionService) {
         this.jobRepository = jobRepository;
         this.companyRepository = companyRepository;
         this.restTemplate = new RestTemplate();
         this.objectMapper = new ObjectMapper();
         this.batchJobUpdateService = batchJobUpdateService;
+        this.entityResolutionService = entityResolutionService;
     }
 
     @Async("taskExecutor")
@@ -121,7 +120,7 @@ public class JsearchIngestionService {
         }
 
         String companyName = jobNode.path("employer_name").asText("Unknown Company").trim();
-        Company company = findOrCreateCompany(companyName);
+        Company company = entityResolutionService.findOrCreateCompany(companyName);
         
 
         Optional<Job> existingJobOpt = jobRepository.findByAdzunaId(jobId);
@@ -199,7 +198,7 @@ public class JsearchIngestionService {
             job.setLongitude(jobNode.path("job_longitude").asDouble());
         }
 
-        job.setCompanyName(companyName);
+        job.setCompanyName(company.getName());
 
         if (job.getCreatedAt() == null) {
             job.setCreatedAt(LocalDateTime.now());
@@ -207,15 +206,5 @@ public class JsearchIngestionService {
 
         jobRepository.save(job);
         return true;
-    }
-
-    @Transactional
-    protected Company findOrCreateCompany(String name) {
-        // Normalizăm numele pentru o rezoluție a entităților (Entity Resolution) mai bună
-        // Eliminăm spațiile de la capete și convertim totul la majuscule
-        String normalizedName = name != null ? name.trim().toUpperCase() : "UNKNOWN COMPANY";
-        
-        return companyRepository.findByName(normalizedName)
-                .orElseGet(() -> companyRepository.save(new Company(normalizedName)));
     }
 }
