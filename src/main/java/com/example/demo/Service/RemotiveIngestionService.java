@@ -23,20 +23,20 @@ public class RemotiveIngestionService {
     private static final Logger log = LoggerFactory.getLogger(RemotiveIngestionService.class);
 
     private final JobRepository jobRepository;
-    private final CompanyRepository companyRepository;
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;
     private final EntityResolutionService entityResolutionService;
+    private final NerExtractionService nerExtractionService;
 
     // Folosim categoria "software-dev" pentru a aduce doar joburi IT
     private final String BASE_URL = "https://remotive.com/api/remote-jobs?category=software-dev";
 
-    public RemotiveIngestionService(JobRepository jobRepository, CompanyRepository companyRepository, EntityResolutionService entityResolutionService) {
+    public RemotiveIngestionService(JobRepository jobRepository, RestTemplate restTemplate, ObjectMapper objectMapper, EntityResolutionService entityResolutionService, NerExtractionService nerExtractionService) {
         this.jobRepository = jobRepository;
-        this.companyRepository = companyRepository;
-        this.restTemplate = new RestTemplate();
-        this.objectMapper = new ObjectMapper();
+        this.restTemplate = restTemplate;
+        this.objectMapper = objectMapper;
         this.entityResolutionService = entityResolutionService;
+        this.nerExtractionService = nerExtractionService;
     }
 
     /**
@@ -133,7 +133,7 @@ public class RemotiveIngestionService {
                 String dateStr = jobNode.path("publication_date").asText();
                 if(dateStr.length() >= 19) {
                      LocalDateTime ldt = LocalDateTime.parse(dateStr.substring(0, 19));
-                     job.setCreatedDate(ldt);
+                     job.setCreatedAt(ldt);
                 }
              } catch (Exception e) {
                  log.warn("Remotive - Could not parse publication date: {}", e.getMessage());
@@ -146,7 +146,8 @@ public class RemotiveIngestionService {
             job.setCreatedAt(LocalDateTime.now());
         }
 
-        jobRepository.save(job);
+        Job savedJob = jobRepository.save(job);
+        nerExtractionService.processJob(savedJob);
         return true;
     }
 }

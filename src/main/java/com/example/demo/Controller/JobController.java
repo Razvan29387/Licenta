@@ -18,15 +18,15 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.data.neo4j.core.Neo4jClient;
 
-
 import java.net.URI;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.ArrayList;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api")
@@ -34,15 +34,20 @@ public class JobController {
 
     private final JobRepository jobRepository;
     private final ApplicationRepository applicationRepository;
+    private final CompanyRepository companyRepository;
     private final Neo4jClient neo4jClient;
     private final BatchJobUpdateService batchJobUpdateService;
     private final EntityResolutionService entityResolutionService;
 
     public JobController(JobRepository jobRepository,
-                         ApplicationRepository applicationRepository, Neo4jClient neo4jClient,
-                         BatchJobUpdateService batchJobUpdateService, EntityResolutionService entityResolutionService) {
+                         ApplicationRepository applicationRepository,
+                         CompanyRepository companyRepository,
+                         Neo4jClient neo4jClient,
+                         BatchJobUpdateService batchJobUpdateService,
+                         EntityResolutionService entityResolutionService) {
         this.jobRepository = jobRepository;
         this.applicationRepository = applicationRepository;
+        this.companyRepository = companyRepository;
         this.neo4jClient = neo4jClient;
         this.batchJobUpdateService = batchJobUpdateService;
         this.entityResolutionService = entityResolutionService;
@@ -101,7 +106,6 @@ public class JobController {
 
     @PostMapping("/jobs")
     public ResponseEntity<Job> createJob(@RequestBody JobRequestDTO jobRequest) {
-        // Use the entity resolution service to find or create the company
         Company company = entityResolutionService.findOrCreateCompany(jobRequest.getCompanyName());
 
         String generatedId = "local_" + UUID.randomUUID().toString();
@@ -119,7 +123,7 @@ public class JobController {
 
         newJob.setExperienceLevel(jobRequest.getExperienceLevel());
         newJob.setProgrammingLanguages(jobRequest.getProgrammingLanguages());
-        newJob.setCompanyName(company.getName()); // Use the resolved company name
+        newJob.setCompanyName(company.getName());
 
         Job savedJob = jobRepository.save(newJob);
 
@@ -142,7 +146,6 @@ public class JobController {
         job.setExperienceLevel(jobRequest.getExperienceLevel());
         job.setProgrammingLanguages(jobRequest.getProgrammingLanguages());
 
-        // Also update the company if the name has changed, using the resolution service
         Company company = entityResolutionService.findOrCreateCompany(jobRequest.getCompanyName());
         job.setCompany(company);
         job.setCompanyName(company.getName());
@@ -157,45 +160,38 @@ public class JobController {
         long totalCompanies = companyRepository.countCompanies();
         long totalApplications = applicationRepository.count();
 
+        final String COUNT_KEY = "count";
+
         String countryQuery = "MATCH (j:Job) WHERE j.country IS NOT NULL AND j.country <> 'Unknown Country' AND j.country <> 'null' AND j.country <> 'Unknown' " +
                 "RETURN j.country AS country, count(j) AS count ORDER BY count DESC LIMIT 10";
 
-        Collection<Map> countryData = neo4jClient.query(countryQuery)
-                .fetchAs(Map.class)
-                .mappedBy((typeSystem, record) -> Map.of("country", record.get("country").asString(), "count", record.get("count").asLong()))
-                .all();
-
-        List<Map<String, Object>> jobsByCountry = new ArrayList<>();
-        for (Map m : countryData) {
-            jobsByCountry.add((Map<String, Object>) m);
-        }
+        List<Map<String, Object>> jobsByCountry = neo4jClient.query(countryQuery)
+                .fetch()
+                .all()
+                .stream()
+                .map(row -> Map.of("country", row.get("country"), COUNT_KEY, row.get("count")))
+                .collect(Collectors.toList());
 
         String categoryQuery = "MATCH (j:Job) WHERE j.category IS NOT NULL AND j.category <> 'Uncategorized' AND j.category <> 'null' AND j.category <> 'Unknown' " +
                 "RETURN j.category AS category, count(j) AS count ORDER BY count DESC LIMIT 10";
 
-        Collection<Map> categoryData = neo4jClient.query(categoryQuery)
-                .fetchAs(Map.class)
-                .mappedBy((typeSystem, record) -> Map.of("category", record.get("category").asString(), "count", record.get("count").asLong()))
-                .all();
-
-        List<Map<String, Object>> jobsByCategory = new ArrayList<>();
-        for (Map m : categoryData) {
-            jobsByCategory.add((Map<String, Object>) m);
-        }
+        List<Map<String, Object>> jobsByCategory = neo4jClient.query(categoryQuery)
+                .fetch()
+                .all()
+                .stream()
+                .map(row -> Map.of("category", row.get("category"), COUNT_KEY, row.get("count")))
+                .collect(Collectors.toList());
 
         String languageQuery = "MATCH (j:Job) WHERE j.category = 'IT' AND j.programmingLanguages IS NOT NULL " +
                 "UNWIND j.programmingLanguages AS language " +
                 "RETURN language, count(j) AS count ORDER BY count DESC LIMIT 10";
 
-        Collection<Map> languageData = neo4jClient.query(languageQuery)
-                .fetchAs(Map.class)
-                .mappedBy((typeSystem, record) -> Map.of("language", record.get("language").asString(), "count", record.get("count").asLong()))
-                .all();
-
-        List<Map<String, Object>> jobsByLanguage = new ArrayList<>();
-        for (Map m : languageData) {
-            jobsByLanguage.add((Map<String, Object>) m);
-        }
+        List<Map<String, Object>> jobsByLanguage = neo4jClient.query(languageQuery)
+                .fetch()
+                .all()
+                .stream()
+                .map(row -> Map.of("language", row.get("language"), COUNT_KEY, row.get("count")))
+                .collect(Collectors.toList());
 
         Map<String, Object> stats = new HashMap<>();
         stats.put("totalJobs", totalJobs);

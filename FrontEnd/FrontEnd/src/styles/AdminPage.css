@@ -1,128 +1,242 @@
 /* AdminPage.css */
-
 .admin-container {
-    max-width: 900px;
+    max-width: 1000px;
     margin: 40px auto;
     padding: 20px;
-    font-family: 'Segoe UI', 'Roboto', sans-serif;
-    background-color: #f9fafb;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
 }
 
 .admin-title {
-    color: #2c3e50;
-    font-size: 2.5rem;
     text-align: center;
+    font-size: 2.5rem;
+    color: #2c3e50;
     margin-bottom: 10px;
 }
 
 .admin-subtitle {
-    color: #5a6b7b;
     text-align: center;
-    font-size: 1.1rem;
+    color: #7f8c8d;
     margin-bottom: 40px;
 }
 
 .section-container {
-    margin-bottom: 40px;
+    background-color: #ffffff;
+    padding: 25px;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+    margin-bottom: 30px;
 }
 
 .section-title {
     font-size: 1.8rem;
     color: #34495e;
-    border-bottom: 2px solid #007bff;
+    margin-top: 0;
+    margin-bottom: 10px;
+    border-bottom: 2px solid #ecf0f1;
     padding-bottom: 10px;
+}
+
+.section-subtitle {
+    color: #95a5a6;
+    margin-top: 0;
     margin-bottom: 20px;
 }
 
 .task-card {
-    background-color: #ffffff;
-    border: 1px solid #e0e5ec;
-    border-radius: 12px;
-    padding: 25px;
-    margin-bottom: 15px;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    box-shadow: 0 4px 15px rgba(0, 40, 120, 0.04);
+    padding: 20px;
+    background-color: #fdfdfd;
+    border: 1px solid #ecf0f1;
+    border-radius: 6px;
+    margin-bottom: 15px;
     flex-wrap: wrap;
-    gap: 20px;
 }
 
 .task-info {
-    flex: 2;
+    flex: 1;
     min-width: 300px;
 }
 
 .task-info h3 {
-    margin: 0 0 10px 0;
-    color: #34495e;
-    font-size: 1.3rem;
-    font-family: 'Courier New', Courier, monospace;
+    margin: 0 0 5px 0;
+    color: #2c3e50;
     display: flex;
     align-items: center;
-    gap: 10px; /* Spațiu între steag și text */
+    gap: 10px;
 }
 
-.flag-emoji {
-    font-size: 1.5rem; /* Mărește puțin steagul */
+.task-info .flag-emoji {
+    font-size: 1.5em;
 }
 
 .task-info p {
     margin: 0;
-    color: #5a6b7b;
-    line-height: 1.6;
+    color: #7f8c8d;
+    font-size: 0.95em;
 }
 
 .task-actions {
-    flex: 1;
-    text-align: right;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
     min-width: 200px;
 }
 
 .task-button {
-    padding: 12px 25px;
-    font-size: 1rem;
-    font-weight: 600;
-    color: #fff;
-    background-color: #007bff;
+    padding: 10px 20px;
     border: none;
-    border-radius: 8px;
+    border-radius: 5px;
+    background-color: #3498db;
+    color: white;
+    font-weight: bold;
     cursor: pointer;
-    transition: background-color 0.2s, transform 0.1s;
-    min-width: 160px;
+    transition: background-color 0.2s;
 }
 
-.task-button:hover {
-    background-color: #0056b3;
+.task-button:hover:not(:disabled) {
+    background-color: #2980b9;
 }
 
 .task-button:disabled {
-    background-color: #6c757d;
+    background-color: #bdc3c7;
     cursor: not-allowed;
-    opacity: 0.7;
-}
-
-.task-button:active {
-    transform: scale(0.98);
 }
 
 .feedback-message {
-    margin-top: 15px;
-    font-size: 0.9rem;
-    font-weight: 500;
-    padding: 10px;
-    border-radius: 6px;
+    margin-top: 10px;
+    font-size: 0.9em;
+    padding: 8px;
+    border-radius: 4px;
     text-align: center;
 }
 
 .feedback-message.success {
-    background-color: #e9f7ef;
-    color: #1d643b;
-    border: 1px solid #c3e6cb;
+    background-color: #e8f8f5;
+    color: #1abc9c;
 }
 
 .feedback-message.error {
-    background-color: #f8d7da;
-    color: #721c24;
-    border: 1px solid #f5c6cb;
+    background-color: #fdedec;
+    color: #e74c3c;
+}
+
+.backup-list ul {
+    list-style-type: none;
+    padding: 0;
+}
+
+.backup-list li {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px;
+    border-bottom: 1px solid #ecf0f1;
+}
+
+.load-button {
+    padding: 8px 15px;
+    border: none;
+    border-radius: 5px;
+    background-color: #9b59b6;
+    color: white;
+    cursor: pointer;
+}
+
+.load-button:hover:not(:disabled) {
+    background-color: #8e44ad;
+}
+
+/* Demo Tool Specific Styles */
+.keyword-input {
+    width: 100%;
+    padding: 12px;
+    font-size: 1em;
+    border: 1px solid #bdc3c7;
+    border-radius: 5px;
+    margin-top: 10px;
+    box-sizing: border-box;
+}
+
+.demo-button {
+    background-color: #2ecc71 !important;
+    font-size: 1.1em !important;
+    width: 100%;
+}
+
+.demo-button:hover:not(:disabled) {
+    background-color: #27ae60 !important;
+}
+
+.demo-results-container {
+    margin-top: 20px;
+    padding: 20px;
+    background-color: #f8f9fa;
+    border-radius: 8px;
+    border: 1px solid #e9ecef;
+}
+
+.results-title {
+    margin: 0 0 15px 0;
+    color: #333;
+    text-align: center;
+    font-size: 1.3em;
+}
+
+.stats-grid {
+    display: flex;
+    justify-content: space-around;
+    text-align: center;
+}
+
+.stat-number {
+    font-size: 2.2em;
+    font-weight: bold;
+}
+
+.stat-label {
+    font-size: 0.9em;
+    color: #666;
+}
+
+.memgraph-link-container {
+    margin-top: 25px;
+    text-align: center;
+    padding-top: 20px;
+    border-top: 1px dashed #ced4da;
+}
+
+.memgraph-link-container p {
+    color: #666;
+    font-size: 0.95em;
+    margin-bottom: 10px;
+}
+
+.cypher-query {
+    background-color: #e9ecef;
+    padding: 10px;
+    border-radius: 4px;
+    font-family: 'Courier New', Courier, monospace;
+    color: #495057;
+    display: block;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    text-align: left;
+}
+
+.memgraph-button {
+    margin-top: 15px;
+    padding: 10px 25px;
+    border: none;
+    border-radius: 5px;
+    background-color: #fd7e14;
+    color: white;
+    font-weight: bold;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.memgraph-button:hover {
+    background-color: #e86100;
 }

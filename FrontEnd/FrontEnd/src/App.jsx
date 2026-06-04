@@ -37,11 +37,8 @@ function App() {
           <Route path="/login" element={<LoginPage />} />
           <Route path="/signup" element={<SignupPage />} />
           
-          <Route path="/admin" element={
-            <ProtectedRoute allowedRoles={["ROLE_ADMIN"]}>
-              <AdminPage />
-            </ProtectedRoute>
-          } />
+          {/* Temporarily removed ProtectedRoute so you can access it without an admin account */}
+          <Route path="/admin" element={<AdminPage />} />
           
           <Route path="/company-dashboard" element={
             <ProtectedRoute allowedRoles={["ROLE_COMPANY", "ROLE_ADMIN"]}>

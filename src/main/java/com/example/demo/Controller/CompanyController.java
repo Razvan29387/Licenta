@@ -8,6 +8,7 @@ import com.example.demo.Service.EntityResolutionService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -35,22 +36,25 @@ public class CompanyController {
 
     @GetMapping("/search")
     public ResponseEntity<Company> searchCompanyByName(@RequestParam String name) {
-        // Use EntityResolutionService to search and resolve the company correctly
         Company company = entityResolutionService.findOrCreateCompany(name);
         return ResponseEntity.ok(company);
     }
 
     @PostMapping("/find-or-create")
-    public ResponseEntity<Company> findOrCreateCompany(@RequestBody Map<String, String> payload) {
+    public ResponseEntity<Map<String, Object>> findOrCreateCompany(@RequestBody Map<String, String> payload) {
         String name = payload.get("name");
         if (name == null || name.trim().isEmpty()) {
             return ResponseEntity.badRequest().build();
         }
         
-        // Use the new deduplication algorithm
         Company company = entityResolutionService.findOrCreateCompany(name);
+        
+        // Manually create a Map to ensure the ID is included in the JSON response
+        Map<String, Object> response = new HashMap<>();
+        response.put("id", company.getId());
+        response.put("name", company.getName());
                 
-        return ResponseEntity.ok(company);
+        return ResponseEntity.ok(response);
     }
 
     @GetMapping("/{id}/jobs")

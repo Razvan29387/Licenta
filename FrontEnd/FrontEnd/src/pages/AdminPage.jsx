@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import authHeader from '../services/auth-header';
 import '../styles/AdminPage.css';
 
 const AdminPage = () => {
@@ -21,6 +22,12 @@ const AdminPage = () => {
     const [backupMessage, setBackupMessage] = useState('');
     const [isRestoring, setIsRestoring] = useState(null);
 
+    // New state for the demo keyword population
+    const [keywords, setKeywords] = useState('data analytics');
+    const [isPopulating, setIsPopulating] = useState(false);
+    const [populateStats, setPopulateStats] = useState(null);
+    const [populateError, setPopulateError] = useState('');
+
     useEffect(() => {
         fetchTasks();
         fetchBackups();
@@ -29,7 +36,7 @@ const AdminPage = () => {
 
     const fetchTasks = async () => {
         try {
-            const response = await fetch('/api/maintenance/tasks');
+            const response = await fetch('/api/maintenance/tasks', { headers: authHeader() });
             if (!response.ok) throw new Error('Failed to fetch tasks');
             setTasks(await response.json());
         } catch (error) {
@@ -39,7 +46,7 @@ const AdminPage = () => {
 
     const fetchBackups = async () => {
         try {
-            const response = await fetch('/api/backups');
+            const response = await fetch('/api/backups', { headers: authHeader() });
             if (!response.ok) throw new Error('Failed to fetch backups');
             setBackups(await response.json());
         } catch (error) {
@@ -49,7 +56,7 @@ const AdminPage = () => {
 
     const fetchPruningArchives = async () => {
         try {
-            const response = await fetch('/api/maintenance/pruning-archives');
+            const response = await fetch('/api/maintenance/pruning-archives', { headers: authHeader() });
             if (!response.ok) throw new Error('Failed to fetch pruning archives');
             setPruningArchives(await response.json());
         } catch (error) {
@@ -62,7 +69,10 @@ const AdminPage = () => {
         setRunningTasks(prev => [...prev, taskName]);
         setTaskMessages(prev => ({ ...prev, [taskName]: `Starting task '${taskName}'...` }));
         try {
-            const response = await fetch(`/api/maintenance/trigger-import/${taskName}`, { method: 'POST' });
+            const response = await fetch(`/api/maintenance/trigger-import/${taskName}`, { 
+                method: 'POST',
+                headers: authHeader() 
+            });
             const responseText = await response.text();
             if (!response.ok) throw new Error(responseText || `Failed to trigger ${taskName}`);
             setTaskMessages(prev => ({ ...prev, [taskName]: responseText }));
@@ -73,12 +83,45 @@ const AdminPage = () => {
         }
     };
 
+    const handlePopulateByKeywords = async () => {
+        if (isPopulating || !keywords.trim()) return;
+        setIsPopulating(true);
+        setPopulateStats(null);
+        setPopulateError('');
+        
+        try {
+            const response = await fetch('/api/maintenance/populate-by-keywords', {
+                method: 'POST',
+                headers: { 
+                    'Content-Type': 'application/json',
+                    ...authHeader()
+                },
+                body: JSON.stringify({ keywords: keywords.trim() }),
+            });
+            
+            if (!response.ok) {
+                throw new Error('Failed to start population task');
+            }
+            
+            const stats = await response.json();
+            setPopulateStats(stats);
+            
+        } catch (error) {
+            setPopulateError(`Error: ${error.message}`);
+        } finally {
+            setIsPopulating(false);
+        }
+    };
+
     const handleTriggerPruning = async () => {
         if (isPruning) return;
         setIsPruning(true);
         setPruningMessage('Starting database pruning...');
         try {
-            const response = await fetch('/api/maintenance/trigger-pruning', { method: 'POST' });
+            const response = await fetch('/api/maintenance/trigger-pruning', { 
+                method: 'POST',
+                headers: authHeader() 
+            });
             const responseText = await response.text();
             if (!response.ok) throw new Error(responseText || 'Failed to trigger pruning');
             setPruningMessage(responseText);
@@ -86,7 +129,6 @@ const AdminPage = () => {
             setPruningMessage(`Error: ${error.message}`);
         } finally {
             setIsPruning(false);
-            // Refresh archives after pruning might be completed (could take a while though)
             setTimeout(fetchPruningArchives, 5000); 
         }
     };
@@ -99,7 +141,10 @@ const AdminPage = () => {
         try {
             const response = await fetch('/api/maintenance/restore-archive', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 
+                    'Content-Type': 'application/json',
+                    ...authHeader()
+                },
                 body: JSON.stringify({ filename }),
             });
             const responseText = await response.text();
@@ -113,14 +158,17 @@ const AdminPage = () => {
     };
 
     const handleLoadBackup = async (filename) => {
-        const isConfirmed = window.confirm(`CONFIRM LOAD BACKUP\n\nThis will DELETE ALL EXISTING DATA in the database and replace it completely with the contents of '${filename}'. \n\nAre you absolutely sure you want to proceed? This cannot be undone.`);
+        const isConfirmed = window.confirm(`CONFIRM LOAD BACKUP\n\nThis will DELETE ALL EXISTING DATA...`);
         if (!isConfirmed) return;
         setIsRestoring(filename);
         setBackupMessage(`Clearing database and loading script ${filename}...`);
         try {
             const response = await fetch('/api/backups/load', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 
+                    'Content-Type': 'application/json',
+                    ...authHeader()
+                },
                 body: JSON.stringify({ filename }),
             });
             const data = await response.json();
@@ -133,62 +181,32 @@ const AdminPage = () => {
         }
     };
 
-    // Dicționar detaliat pentru steaguri
     const getFlagForCountry = (countryCode) => {
         if (!countryCode) return '🌐';
-        
         const code = countryCode.toUpperCase();
-
-        const flags = {
-            'GB': '🇬🇧', 
-            'UK': '🇬🇧',
-            'US': '🇺🇸', 
-            'USA': '🇺🇸',
-            'DE': '🇩🇪', 
-            'FR': '🇫🇷', 
-            'CA': '🇨🇦', 
-            'AU': '🇦🇺', 
-            'NL': '🇳🇱', 
-            'IN': '🇮🇳', 
-            'ES': '🇪🇸', 
-            'IT': '🇮🇹', 
-            'BR': '🇧🇷', 
-            'PL': '🇵🇱',
-            'AT': '🇦🇹',
-            'CH': '🇨🇭',
-            'RO': '🇷🇴',
-            'FB': '🇧🇷' // Am adăugat FB ca mapare manuală către Brazilia, în caz că e o greșeală în date
-        };
-        
-        if (flags[code]) {
-            return flags[code];
-        }
-
-        // Metoda fallback pentru generarea emoji-ului din codul de 2 litere (standard ISO)
+        const flags = {'GB': '🇬🇧', 'UK': '🇬🇧', 'US': '🇺🇸', 'USA': '🇺🇸', 'DE': '🇩🇪', 'FR': '🇫🇷', 'CA': '🇨🇦', 'AU': '🇦🇺', 'NL': '🇳🇱', 'IN': '🇮🇳', 'ES': '🇪🇸', 'IT': '🇮🇹', 'BR': '🇧🇷', 'PL': '🇵🇱', 'AT': '🇦🇹', 'CH': '🇨🇭', 'RO': '🇷🇴', 'FB': '🇧🇷'};
+        if (flags[code]) return flags[code];
         if (code.length === 2) {
              try {
                 const codePoints = code.split('').map(char => 127397 + char.charCodeAt());
                 return String.fromCodePoint(...codePoints);
-             } catch (e) {
-                return '🌐';
-             }
+             } catch (e) { return '🌐'; }
         }
-        
         return '🌐';
     };
 
     const renderTaskTitle = (taskName) => {
         if (taskName.startsWith('adzuna-')) {
             const countryCode = taskName.substring(7);
-            return <h3><span className="flag-emoji" style={{ fontSize: '1.5em', marginRight: '8px' }}>{getFlagForCountry(countryCode)}</span>{taskName}</h3>;
+            return <h3><span className="flag-emoji">{getFlagForCountry(countryCode)}</span>{taskName}</h3>;
         } else if (taskName.startsWith('jsearch-')) {
-            return <h3><span className="flag-emoji" style={{ fontSize: '1.5em', marginRight: '8px' }}>🔍</span>{taskName}</h3>;
+            return <h3><span className="flag-emoji">🔍</span>{taskName}</h3>;
         } else if (taskName.startsWith('remotive-')) {
-            return <h3><span className="flag-emoji" style={{ fontSize: '1.5em', marginRight: '8px' }}>🌍</span>{taskName}</h3>;
+            return <h3><span className="flag-emoji">🌍</span>{taskName}</h3>;
         } else if (taskName.startsWith('himalayas-')) {
-            return <h3><span className="flag-emoji" style={{ fontSize: '1.5em', marginRight: '8px' }}>🏔️</span>{taskName}</h3>;
+            return <h3><span className="flag-emoji">🏔️</span>{taskName}</h3>;
         }
-        return <h3><span className="flag-emoji" style={{ fontSize: '1.5em', marginRight: '8px' }}>🤖</span>{taskName}</h3>;
+        return <h3><span className="flag-emoji">🤖</span>{taskName}</h3>;
     };
 
     const getTaskDescription = (taskName) => {
@@ -204,6 +222,67 @@ const AdminPage = () => {
         <div className="admin-container">
             <h1 className="admin-title">Task Administration</h1>
             <p className="admin-subtitle">Manually trigger backend tasks and manage database backups.</p>
+
+            <div className="section-container">
+                <h2 className="section-title">Demo Presentation Tool</h2>
+                <div className="task-card" style={{ border: '2px solid #007bff' }}>
+                    <div className="task-info">
+                        <h3>Populate Database by Keywords</h3>
+                        <p>Enter keywords to fetch jobs from multiple sources and populate the database. Ideal for live demos.</p>
+                        <input 
+                            type="text" 
+                            className="keyword-input"
+                            style={{ padding: '10px', width: '100%', marginTop: '10px', borderRadius: '4px', border: '1px solid #ccc' }}
+                            value={keywords}
+                            onChange={(e) => setKeywords(e.target.value)}
+                            placeholder='e.g., data analytics, "cyber security + IoT"'
+                        />
+                    </div>
+                    <div className="task-actions" style={{ marginTop: '15px' }}>
+                        <button 
+                            onClick={handlePopulateByKeywords} 
+                            disabled={isPopulating} 
+                            className="task-button demo-button" 
+                            style={{ backgroundColor: '#28a745', fontSize: '1.1em', width: '100%' }}
+                        >
+                            {isPopulating ? (
+                                <span>⏳ Fetching jobs (this takes ~5 seconds)...</span>
+                            ) : (
+                                '🚀 Populate for Demo'
+                            )}
+                        </button>
+                        
+                        {populateError && <p className="error-message" style={{ color: '#dc3545', marginTop: '10px' }}>{populateError}</p>}
+                        
+                        {populateStats && (
+                            <div className="demo-results-container">
+                                <h4 className="results-title">Import Results</h4>
+                                <div className="stats-grid">
+                                    <div>
+                                        <div className="stat-number" style={{ color: '#17a2b8' }}>{populateStats.totalFound}</div>
+                                        <div className="stat-label">Jobs Found</div>
+                                    </div>
+                                    <div>
+                                        <div className="stat-number" style={{ color: '#28a745' }}>{populateStats.saved}</div>
+                                        <div className="stat-label">Successfully Saved</div>
+                                    </div>
+                                    <div>
+                                        <div className="stat-number" style={{ color: populateStats.errors > 0 ? '#dc3545' : '#6c757d' }}>{populateStats.errors}</div>
+                                        <div className="stat-label">Errors / Skipped</div>
+                                    </div>
+                                </div>
+                                <div className="memgraph-link-container">
+                                    <p>To see the new nodes, run this query in Memgraph Lab:</p>
+                                    <pre className="cypher-query">MATCH (j:Job)-[r]-(c:Company) WHERE toLower(j.title) CONTAINS '{keywords.toLowerCase().split(' ')[0]}' RETURN j,r,c LIMIT 25</pre>
+                                    <button onClick={() => window.open('http://localhost:3000', '_blank')} className="memgraph-button">
+                                        Open Memgraph Lab
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </div>
 
             <div className="section-container">
                 <h2 className="section-title">Data Import Tasks</h2>
@@ -222,7 +301,7 @@ const AdminPage = () => {
             <div className="section-container">
                 <h2 className="section-title">Maintenance Tasks</h2>
                 <div className="task-card">
-                    <div className="task-info"><h3>Weekly Database Pruning</h3><p>Archives and deletes jobs older than 90 days. Runs automatically every Sunday.</p></div>
+                    <div className="task-info"><h3>Weekly Database Pruning</h3><p>Archives and deletes jobs older than 21 days. Runs automatically every Sunday.</p></div>
                     <div className="task-actions">
                         <button onClick={handleTriggerPruning} disabled={isPruning} className="task-button">{isPruning ? 'Pruning...' : 'Trigger Pruning'}</button>
                         {pruningMessage && <p className={`feedback-message ${pruningMessage.includes('Error') ? 'error' : 'success'}`}>{pruningMessage}</p>}

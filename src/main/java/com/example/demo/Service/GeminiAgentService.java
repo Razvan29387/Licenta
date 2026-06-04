@@ -20,8 +20,7 @@ public class GeminiAgentService {
     @Value("${gemini.api.key}")
     private String GEMINI_API_KEY;
     
-    // URL-ul pentru modelul Gemini 1.5 Flash (bun pentru text si JSON)
-    private final String GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent";
+    private final String GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent";
 
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;
@@ -29,6 +28,16 @@ public class GeminiAgentService {
     public GeminiAgentService() {
         this.restTemplate = new RestTemplate();
         this.objectMapper = new ObjectMapper();
+    }
+
+    /**
+     * A general-purpose method to ask the Gemini model a question.
+     * @param userPrompt The question or instruction for the AI.
+     * @return The text response from the AI.
+     */
+    public String ask(String userPrompt) {
+        String systemInstruction = "You are a helpful assistant. Respond concisely and accurately.";
+        return callGemini(systemInstruction, userPrompt, false);
     }
 
     /**
@@ -48,7 +57,6 @@ public class GeminiAgentService {
         String systemInstruction = "You are an expert HR AI Assistant. Your job is to evaluate a candidate's CV against a specific Job Description. You must return ONLY a JSON object with two fields: 'score' (an integer between 0 and 100 representing the match percentage) and 'feedback' (a short 2-sentence explanation of why you gave this score, highlighting pros and cons). Do not wrap the JSON in markdown code blocks like ```json, just return the raw JSON string.";
         String userPrompt = String.format("Job Description:\n%s\n\nCandidate CV:\n%s", jobDescription, candidateCv);
 
-        // Fortam raspuns JSON
         return callGemini(systemInstruction, userPrompt, true);
     }
 
@@ -68,28 +76,23 @@ public class GeminiAgentService {
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
 
-            // Gemini API Body Structure
             Map<String, Object> requestBody = new HashMap<>();
             
-            // 1. System Instruction (equivalent to "system" role in OpenAI)
             Map<String, Object> systemInstructionPart = new HashMap<>();
             systemInstructionPart.put("parts", List.of(Map.of("text", systemInstruction)));
             requestBody.put("system_instruction", systemInstructionPart);
 
-            // 2. Contents (equivalent to "user" role in OpenAI)
             Map<String, Object> contentPart = new HashMap<>();
             contentPart.put("role", "user");
             contentPart.put("parts", List.of(Map.of("text", userPrompt)));
             requestBody.put("contents", List.of(contentPart));
 
-            // 3. Generation Config (for forcing JSON if needed)
             if (requireJson) {
                 Map<String, Object> generationConfig = new HashMap<>();
                 generationConfig.put("response_mime_type", "application/json");
                 requestBody.put("generationConfig", generationConfig);
             }
 
-            // Aici adaugam "?key=" inainte de cheia API in mod dinamic!
             String fullUrl = GEMINI_API_URL + "?key=" + GEMINI_API_KEY;
             HttpEntity<Map<String, Object>> request = new HttpEntity<>(requestBody, headers);
             
@@ -97,8 +100,6 @@ public class GeminiAgentService {
 
             JsonNode root = objectMapper.readTree(response.getBody());
             
-            // Extract text from Gemini's response structure
-            // response.candidates[0].content.parts[0].text
             return root.path("candidates").get(0)
                        .path("content")
                        .path("parts").get(0)
@@ -110,7 +111,7 @@ public class GeminiAgentService {
             if (requireJson) {
                 return "{\"score\": 0, \"feedback\": \"Error connecting to Gemini API.\"}";
             }
-            return "Error generating description: " + e.getMessage();
+            return "Error generating response: " + e.getMessage();
         }
     }
 }

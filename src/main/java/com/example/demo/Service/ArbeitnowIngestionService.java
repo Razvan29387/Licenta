@@ -24,19 +24,19 @@ public class ArbeitnowIngestionService {
     private static final Logger log = LoggerFactory.getLogger(ArbeitnowIngestionService.class);
 
     private final JobRepository jobRepository;
-    private final CompanyRepository companyRepository;
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;
     private final EntityResolutionService entityResolutionService;
+    private final NerExtractionService nerExtractionService;
 
     private final String BASE_URL = "https://www.arbeitnow.com/api/job-board-api";
 
-    public ArbeitnowIngestionService(JobRepository jobRepository, CompanyRepository companyRepository, EntityResolutionService entityResolutionService) {
+    public ArbeitnowIngestionService(JobRepository jobRepository, RestTemplate restTemplate, ObjectMapper objectMapper, EntityResolutionService entityResolutionService, NerExtractionService nerExtractionService) {
         this.jobRepository = jobRepository;
-        this.companyRepository = companyRepository;
-        this.restTemplate = new RestTemplate();
-        this.objectMapper = new ObjectMapper();
+        this.restTemplate = restTemplate;
+        this.objectMapper = objectMapper;
         this.entityResolutionService = entityResolutionService;
+        this.nerExtractionService = nerExtractionService;
     }
 
     @Async("taskExecutor")
@@ -45,7 +45,6 @@ public class ArbeitnowIngestionService {
 
         for (int page = startPage; page <= endPage; page++) {
             try {
-                // Added '&search=...' to filter for technology-related jobs
                 String url = BASE_URL + "?page=" + page + "&search=it,software,developer,engineer,data";
                 
                 String jsonResponse = restTemplate.getForObject(url, String.class);
@@ -117,7 +116,7 @@ public class ArbeitnowIngestionService {
             try {
                 long timestamp = jobNode.path("created_at").asLong();
                 LocalDateTime ldt = LocalDateTime.ofInstant(Instant.ofEpochSecond(timestamp), ZoneOffset.UTC);
-                job.setCreatedDate(ldt);
+                job.setCreatedAt(ldt);
             } catch (Exception e) {
                 log.warn("Arbeitnow - Could not parse created date for job {}: {}", slug, e.getMessage());
             }
@@ -129,6 +128,7 @@ public class ArbeitnowIngestionService {
             job.setCreatedAt(LocalDateTime.now());
         }
 
-        jobRepository.save(job);
+        Job savedJob = jobRepository.save(job);
+        nerExtractionService.processJob(savedJob);
     }
 }

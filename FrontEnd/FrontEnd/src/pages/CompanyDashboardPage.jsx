@@ -30,9 +30,7 @@ const CompanyDashboardPage = () => {
             
             const fetchAndMergeJobs = async () => {
                 try {
-                    // 1. Fetch jobs from the database
                     let dbJobs = [];
-                    // Use find-or-create to avoid 404 errors if the company is new and hasn't posted yet
                     const compRes = await fetch(`/api/companies/find-or-create`, {
                         method: 'POST',
                         headers: {
@@ -41,22 +39,28 @@ const CompanyDashboardPage = () => {
                         },
                         body: JSON.stringify({ name: companyName })
                     });
-
+                    
                     if (compRes.ok) {
                         const company = await compRes.json();
-                        const jobsRes = await fetch(`/api/companies/${company.id}/jobs`, {
-                            headers: authHeader()
-                        });
-                        if (jobsRes.ok) {
-                            dbJobs = await jobsRes.json();
+                        console.log("Received company object:", company); // Debugging line
+
+                        if (company && company.id) { // Defensive check
+                            const jobsRes = await fetch(`/api/companies/${company.id}/jobs`, {
+                                headers: authHeader()
+                            });
+                            if (jobsRes.ok) {
+                                dbJobs = await jobsRes.json();
+                            }
+                        } else {
+                            throw new Error("Could not retrieve a valid company ID from the server.");
                         }
+                    } else {
+                        throw new Error("Failed to find or create company on the server.");
                     }
 
-                    // 2. Load jobs from localStorage
                     const localJobsRaw = localStorage.getItem('companyDashboardJobs');
                     const localJobs = localJobsRaw ? JSON.parse(localJobsRaw) : [];
 
-                    // 3. Merge the lists
                     const dbJobIds = new Set(dbJobs.map(j => j.id));
                     const uniqueLocalJobs = localJobs.filter(localJob => 
                         !dbJobIds.has(localJob.id) && localJob.companyName === companyName
@@ -67,7 +71,7 @@ const CompanyDashboardPage = () => {
 
                 } catch (err) {
                     console.error("Failed to fetch and merge jobs:", err);
-                    setError("Could not load your company's jobs.");
+                    setError("Could not load your company's jobs. " + err.message);
                 }
             };
             fetchAndMergeJobs();

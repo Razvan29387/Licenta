@@ -30,6 +30,7 @@ public class AdzunaIngestionService {
     private final ObjectMapper objectMapper;
     private final BatchJobUpdateService batchJobUpdateService;
     private final EntityResolutionService entityResolutionService;
+    private final NerExtractionService nerExtractionService;
 
     @Value("${adzuna.api.id}")
     private String APP_ID;
@@ -39,13 +40,14 @@ public class AdzunaIngestionService {
 
     private final String BASE_URL = "https://api.adzuna.com/v1/api/jobs";
 
-    public AdzunaIngestionService(JobRepository jobRepository, CompanyRepository companyRepository, BatchJobUpdateService batchJobUpdateService, EntityResolutionService entityResolutionService) {
+    public AdzunaIngestionService(JobRepository jobRepository, CompanyRepository companyRepository, BatchJobUpdateService batchJobUpdateService, EntityResolutionService entityResolutionService, NerExtractionService nerExtractionService) {
         this.jobRepository = jobRepository;
         this.companyRepository = companyRepository;
         this.restTemplate = new RestTemplate();
         this.objectMapper = new ObjectMapper();
         this.batchJobUpdateService = batchJobUpdateService;
         this.entityResolutionService = entityResolutionService;
+        this.nerExtractionService = nerExtractionService;
     }
 
     @Async("taskExecutor")
@@ -173,7 +175,7 @@ public class AdzunaIngestionService {
         if (jobNode.has("created") && !jobNode.get("created").isNull()) {
             try {
                 OffsetDateTime odt = OffsetDateTime.parse(jobNode.path("created").asText());
-                job.setCreatedDate(odt.toLocalDateTime());
+                job.setCreatedAt(odt.toLocalDateTime());
             } catch (Exception e) {
                 log.warn("Could not parse created date for job {}: {}", adzunaId, e.getMessage());
             }
@@ -187,6 +189,9 @@ public class AdzunaIngestionService {
         }
 
         // 4. Salvare în baza de date (dacă e job vechi va face UPDATE, dacă e nou va face INSERT)
-        jobRepository.save(job);
+        Job savedJob = jobRepository.save(job);
+        
+        // 5. Rulăm extragerea NER
+        nerExtractionService.processJob(savedJob);
     }
 }

@@ -5,28 +5,20 @@ import org.springframework.data.neo4j.core.schema.Id;
 import org.springframework.data.neo4j.core.schema.Node;
 
 @Node
-public class Company {
+public class Skill {
     @Id @GeneratedValue
     private Long id;
 
     private String name;
-    
-    private String website; 
 
-    public Company() {
-        // Constructor gol necesar pentru deserializare JSON
-    }
+    public Skill() {}
 
-    public Company(String name) {
+    public Skill(String name) {
         this.name = name;
     }
 
     public Long getId() {
         return id;
-    }
-
-    public void setId(Long id) {
-        this.id = id;
     }
 
     public String getName() {
@@ -36,12 +28,17 @@ public class Company {
     public void setName(String name) {
         this.name = name;
     }
-    
-    public String getWebsite() {
-        return website;
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        Skill skill = (Skill) o;
+        return name.equals(skill.name);
     }
 
-    public void setWebsite(String website) {
-        this.website = website;
+    @Override
+    public int hashCode() {
+        return name.hashCode();
     }
 }

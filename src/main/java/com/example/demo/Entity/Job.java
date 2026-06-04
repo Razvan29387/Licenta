@@ -6,14 +6,15 @@ import org.springframework.data.neo4j.core.schema.Node;
 import org.springframework.data.neo4j.core.schema.Relationship;
 
 import java.time.LocalDateTime;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 @Node
 public class Job {
     @Id @GeneratedValue
     private Long id;
 
-    // Câmpurile tale originale
     private String adzunaId;
     private String title;
     private String location;
@@ -23,7 +24,7 @@ public class Job {
     private String category;
     private LocalDateTime createdAt;
     private String experienceLevel;
-    private List<String> programmingLanguages;
+    private List<String> programmingLanguages; // Kept for backward compatibility with old data
     private Double salaryMin;
     private Double salaryMax;
     private String salaryPeriod;
@@ -31,10 +32,8 @@ public class Job {
     private List<String> locationArea;
     private String categoryTag;
     private String contractType;
-    private LocalDateTime createdDate;
     private String companyName;
 
-    // Câmpuri noi adăugate (ce lipsea din cerința ta, fără jobId extra)
     private String employerWebsite;
     private Boolean jobIsRemote;
     private LocalDateTime jobExpiresAt;
@@ -44,6 +43,9 @@ public class Job {
 
     @Relationship(type = "POSTED_BY", direction = Relationship.Direction.OUTGOING)
     private Company company;
+
+    @Relationship(type = "HAS_SKILL", direction = Relationship.Direction.OUTGOING)
+    private Set<Skill> skills = new HashSet<>();
 
     public Job() {
         this.createdAt = LocalDateTime.now();
@@ -61,7 +63,7 @@ public class Job {
         this.createdAt = LocalDateTime.now();
     }
 
-    // Getters and Setters pentru câmpurile originale
+    // Getters and Setters
     public Long getId() { return id; }
 
     public String getAdzunaId() { return adzunaId; }
@@ -118,13 +120,9 @@ public class Job {
     public String getContractType() { return contractType; }
     public void setContractType(String contractType) { this.contractType = contractType; }
 
-    public LocalDateTime getCreatedDate() { return createdDate; }
-    public void setCreatedDate(LocalDateTime createdDate) { this.createdDate = createdDate; }
-
     public String getCompanyName() { return companyName; }
     public void setCompanyName(String companyName) { this.companyName = companyName; }
 
-    // Getters and Setters pentru câmpurile noi adăugate
     public String getEmployerWebsite() { return employerWebsite; }
     public void setEmployerWebsite(String employerWebsite) { this.employerWebsite = employerWebsite; }
 
@@ -142,4 +140,7 @@ public class Job {
 
     public Double getLongitude() { return longitude; }
     public void setLongitude(Double longitude) { this.longitude = longitude; }
+
+    public Set<Skill> getSkills() { return skills; }
+    public void setSkills(Set<Skill> skills) { this.skills = skills; }
 }

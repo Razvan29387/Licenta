@@ -24,19 +24,19 @@ public class HimalayasIngestionService {
     private static final Logger log = LoggerFactory.getLogger(HimalayasIngestionService.class);
 
     private final JobRepository jobRepository;
-    private final CompanyRepository companyRepository;
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;
     private final EntityResolutionService entityResolutionService;
+    private final NerExtractionService nerExtractionService;
 
     private final String BASE_URL = "https://himalayas.app/jobs/api";
 
-    public HimalayasIngestionService(JobRepository jobRepository, CompanyRepository companyRepository, EntityResolutionService entityResolutionService) {
+    public HimalayasIngestionService(JobRepository jobRepository, RestTemplate restTemplate, ObjectMapper objectMapper, EntityResolutionService entityResolutionService, NerExtractionService nerExtractionService) {
         this.jobRepository = jobRepository;
-        this.companyRepository = companyRepository;
-        this.restTemplate = new RestTemplate();
-        this.objectMapper = new ObjectMapper();
+        this.restTemplate = restTemplate;
+        this.objectMapper = objectMapper;
         this.entityResolutionService = entityResolutionService;
+        this.nerExtractionService = nerExtractionService;
     }
 
     @Async("taskExecutor")
@@ -153,7 +153,7 @@ public class HimalayasIngestionService {
                  // Format is usually unix timestamp
                  long timestamp = jobNode.path("pubDate").asLong();
                  LocalDateTime ldt = LocalDateTime.ofInstant(Instant.ofEpochMilli(timestamp), ZoneOffset.UTC);
-                 job.setCreatedDate(ldt);
+                 job.setCreatedAt(ldt);
              } catch (Exception e) {
                  // Ignore format issues
              }
@@ -165,7 +165,8 @@ public class HimalayasIngestionService {
             job.setCreatedAt(LocalDateTime.now());
         }
 
-        jobRepository.save(job);
+        Job savedJob = jobRepository.save(job);
+        nerExtractionService.processJob(savedJob);
         return true;
     }
 }

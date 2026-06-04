@@ -29,22 +29,22 @@ public class JoobleIngestionService {
     private static final Logger log = LoggerFactory.getLogger(JoobleIngestionService.class);
 
     private final JobRepository jobRepository;
-    private final CompanyRepository companyRepository;
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;
     private final EntityResolutionService entityResolutionService;
+    private final NerExtractionService nerExtractionService;
 
     @Value("${jooble.api.key}")
     private String API_KEY;
 
     private final String BASE_URL = "https://jooble.org/api/";
 
-    public JoobleIngestionService(JobRepository jobRepository, CompanyRepository companyRepository, EntityResolutionService entityResolutionService) {
+    public JoobleIngestionService(JobRepository jobRepository, RestTemplate restTemplate, ObjectMapper objectMapper, EntityResolutionService entityResolutionService, NerExtractionService nerExtractionService) {
         this.jobRepository = jobRepository;
-        this.companyRepository = companyRepository;
-        this.restTemplate = new RestTemplate();
-        this.objectMapper = new ObjectMapper();
+        this.restTemplate = restTemplate;
+        this.objectMapper = objectMapper;
         this.entityResolutionService = entityResolutionService;
+        this.nerExtractionService = nerExtractionService;
     }
 
     @Async("taskExecutor")
@@ -114,7 +114,6 @@ public class JoobleIngestionService {
             return false;
         }
         
-        // Jooble doesn't provide a unique job ID out of the box in all cases, using url hash or id if available
         String jobId = jobNode.path("id").asText();
         if (jobId.isEmpty() || jobId.equals("null")) {
             jobId = String.valueOf(url.hashCode());
@@ -154,7 +153,7 @@ public class JoobleIngestionService {
         if (jobNode.has("salary") && !jobNode.get("salary").isNull()) {
             String salaryStr = jobNode.path("salary").asText();
             if (!salaryStr.isEmpty() && !salaryStr.equals("null")) {
-                job.setSalaryPeriod(salaryStr); // Storing the raw salary string since Jooble sends it as text
+                job.setSalaryPeriod(salaryStr);
             }
         }
         if (jobNode.has("updated") && !jobNode.get("updated").isNull()) {
@@ -162,7 +161,7 @@ public class JoobleIngestionService {
                 String dateStr = jobNode.path("updated").asText();
                 if (dateStr.length() >= 19) {
                     LocalDateTime ldt = LocalDateTime.parse(dateStr.substring(0, 19));
-                    job.setCreatedDate(ldt);
+                    job.setCreatedAt(ldt);
                 }
             } catch (Exception e) {
                 // ignore date parse error
@@ -175,7 +174,8 @@ public class JoobleIngestionService {
             job.setCreatedAt(LocalDateTime.now());
         }
 
-        jobRepository.save(job);
+        Job savedJob = jobRepository.save(job);
+        nerExtractionService.processJob(savedJob);
         return true;
     }
 }

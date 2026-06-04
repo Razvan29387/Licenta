@@ -41,5 +41,9 @@ public interface JobRepository extends Neo4jRepository<Job, Long> {
     @Query("MATCH (j:Job) RETURN count(j)")
     long countJobs();
 
-    List<Job> findByCreatedAtBefore(LocalDateTime date);
+    @Query("MATCH (j:Job) " +
+           "WHERE j.createdAt IS NULL " +
+           "OR datetime(j.createdAt) < $date " +
+           "RETURN j")
+    List<Job> findByCreatedAtBefore(@Param("date") LocalDateTime date);
 }

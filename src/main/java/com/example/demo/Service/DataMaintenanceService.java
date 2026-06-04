@@ -20,6 +20,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
@@ -29,9 +30,8 @@ import java.util.zip.ZipOutputStream;
 public class DataMaintenanceService {
 
     private static final Logger log = LoggerFactory.getLogger(DataMaintenanceService.class);
-    private static final int BATCH_SIZE = 500; // Process 500 jobs per transaction
+    private static final int BATCH_SIZE = 500;
 
-    // --- Configurare Task-uri de Import ---
     private static final int ADZUNA_DAILY_REQUEST_BUDGET = 240;
     private static final int ARBEITNOW_PAGES_TO_FETCH = 30;
     private static final List<String> ADZUNA_TARGET_COUNTRIES = Arrays.asList(
@@ -65,10 +65,8 @@ public class DataMaintenanceService {
         this.jobRepository = jobRepository;
         this.batchJobSaverService = batchJobSaverService;
         
-        // Configurăm ObjectMapper o singură dată
         this.objectMapper = new ObjectMapper();
         this.objectMapper.registerModule(new JavaTimeModule());
-        // CORECȚIE: Prevenim închiderea automată a stream-ului
         this.objectMapper.getFactory().disable(JsonGenerator.Feature.AUTO_CLOSE_TARGET);
     }
 
@@ -91,12 +89,11 @@ public class DataMaintenanceService {
         if ("arbeitnow".equalsIgnoreCase(taskName)) {
             arbeitnowIngestionService.importJobs(1, ARBEITNOW_PAGES_TO_FETCH);
         } else if ("jsearch-it".equalsIgnoreCase(taskName)) {
-            // REDUCED FOR FREE TIER: 200 requests/month means ~6 pages/day.
             jsearchIngestionService.importJobs("IT software developer engineer", 20);
         } else if ("remotive-software".equalsIgnoreCase(taskName)) {
             remotiveIngestionService.importJobs();
         } else if ("himalayas-remote".equalsIgnoreCase(taskName)) {
-            himalayasIngestionService.importJobs(100, 0); // initial offset 0
+            himalayasIngestionService.importJobs(100, 0);
         } else if ("jooble-it".equalsIgnoreCase(taskName)) {
             joobleIngestionService.importJobs("IT", null, 5);
         } else if (taskName.toLowerCase().startsWith("adzuna-")) {
@@ -107,6 +104,12 @@ public class DataMaintenanceService {
         } else {
             log.warn("Unknown task name: {}", taskName);
         }
+    }
+
+    public Map<String, Integer> populateByKeywords(String keywords) {
+        log.info("Starting keyword-based population for: '{}'", keywords);
+        // For the demo, we fetch a small number of pages to get a quick result.
+        return jsearchIngestionService.importJobsSync(keywords, 2);
     }
 
     @Scheduled(cron = "0 0 15 * * ?")
@@ -125,18 +128,17 @@ public class DataMaintenanceService {
     public void triggerWeeklyPruning() {
         log.info("--- STARTING WEEKLY DATABASE PRUNING ---");
 
-        // Setarea pragului de ștergere la 90 de zile pentru a preveni pierderea de date recentă.
-        LocalDateTime timeThreshold = LocalDateTime.now().minusDays(60);
-        log.info("Pruning jobs older than 90 days (threshold: {}).", timeThreshold);
+        LocalDateTime timeThreshold = LocalDateTime.now().minusDays(21);
+        log.info("Pruning jobs older than 21 days (threshold: {}).", timeThreshold);
 
         List<Job> oldJobs = jobRepository.findByCreatedAtBefore(timeThreshold);
 
         if (oldJobs.isEmpty()) {
-            log.info("No jobs older than 90 days found to prune.");
+            log.info("No jobs older than 21 days found to prune.");
             return;
         }
 
-        log.info("Found {} jobs older than 90 days to be pruned.", oldJobs.size());
+        log.info("Found {} jobs older than 21 days to be pruned.", oldJobs.size());
         try {
             archiveJobs(oldJobs);
             log.info("Deleting {} old jobs from the database...", oldJobs.size());
@@ -160,21 +162,18 @@ public class DataMaintenanceService {
             ZipEntry jsonEntry = new ZipEntry("jobs.json");
             zos.putNextEntry(jsonEntry);
             
-            // Acum, ObjectMapper nu va mai închide 'zos' automat
             objectMapper.writerWithDefaultPrettyPrinter().writeValue(zos, jobs);
             
-            zos.closeEntry(); // Această linie este acum sigură
+            zos.closeEntry();
         }
         log.info("Archiving completed successfully.");
     }
 
-    // This method is no longer @Transactional itself. It orchestrates multiple smaller transactions.
     public void restoreFromArchive(String archiveFileName) throws IOException {
         File archiveDir = new File("archives");
         File archiveFile = new File(archiveDir, archiveFileName);
 
         if (!archiveFile.exists()) {
-            log.error("Archive file not found: {}", archiveFile.getAbsolutePath());
             throw new IOException("Archive file not found: " + archiveFileName);
         }
 
@@ -217,12 +216,8 @@ public class DataMaintenanceService {
                     log.warn("No jobs found inside the archive's jobs.json.");
                 }
             } else {
-                log.error("Could not find 'jobs.json' inside the archive.");
                 throw new IOException("Invalid archive format: 'jobs.json' not found.");
             }
-        } catch (IOException e) {
-            log.error("Failed to read or process the archive file: {}", archiveFile.getAbsolutePath(), e);
-            throw e;
         }
     }
 }

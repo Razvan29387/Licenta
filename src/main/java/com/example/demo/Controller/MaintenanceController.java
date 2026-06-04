@@ -8,6 +8,7 @@ import java.io.File;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @RestController
@@ -20,37 +21,33 @@ public class MaintenanceController {
         this.dataMaintenanceService = dataMaintenanceService;
     }
 
-    /**
-     * Returnează lista tuturor task-urilor de import configurate.
-     */
     @GetMapping("/tasks")
     public ResponseEntity<List<String>> getAvailableTasks() {
         return ResponseEntity.ok(dataMaintenanceService.getAvailableImportTasks());
     }
 
-    /**
-     * Endpoint pentru a declanșa manual un singur task de import.
-     * @param taskName Numele task-ului de executat (ex: "arbeitnow", "adzuna-gb").
-     */
     @PostMapping("/trigger-import/{taskName}")
     public ResponseEntity<String> triggerSingleImportTask(@PathVariable String taskName) {
-        // Metoda de import este deja asincronă, deci nu mai este nevoie de 'new Thread()'
         dataMaintenanceService.triggerSingleImportTask(taskName);
         return ResponseEntity.ok("Task '" + taskName + "' started in the background.");
     }
 
-    /**
-     * Endpoint pentru a declanșa manual curățarea săptămânală a bazei de date.
-     */
+    @PostMapping("/populate-by-keywords")
+    public ResponseEntity<Map<String, Integer>> populateByKeywords(@RequestBody Map<String, String> payload) {
+        String keywords = payload.get("keywords");
+        if (keywords == null || keywords.trim().isEmpty()) {
+            return ResponseEntity.badRequest().build();
+        }
+        Map<String, Integer> stats = dataMaintenanceService.populateByKeywords(keywords);
+        return ResponseEntity.ok(stats);
+    }
+
     @PostMapping("/trigger-pruning")
     public ResponseEntity<String> triggerDatabasePruning() {
         new Thread(() -> dataMaintenanceService.triggerWeeklyPruning()).start();
         return ResponseEntity.ok("Database pruning process started in the background.");
     }
 
-    /**
-     * Returnează lista tuturor arhivelor de pruning disponibile.
-     */
     @GetMapping("/pruning-archives")
     public ResponseEntity<List<String>> getAvailablePruningArchives() {
         File archiveDir = new File("archives");
@@ -70,9 +67,6 @@ public class MaintenanceController {
         return ResponseEntity.ok(fileNames);
     }
 
-    /**
-     * Endpoint pentru a restaura datele dintr-o arhivă de pruning.
-     */
     @PostMapping("/restore-archive")
     public ResponseEntity<String> restoreFromArchive(@RequestBody RestoreRequest request) {
         if (request == null || request.getFilename() == null || request.getFilename().trim().isEmpty()) {
