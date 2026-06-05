@@ -64,7 +64,7 @@ public class JobController {
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
         
         if (search != null && !search.isEmpty()) {
-            return jobRepository.searchJobsByKeyword(search, pageable);
+            return jobRepository.searchJobsByKeyword(search.toLowerCase(), pageable);
         }
         if (country != null && !country.isEmpty()) {
             return jobRepository.findByCountry(country, pageable);

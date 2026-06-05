@@ -18,17 +18,17 @@ public interface JobRepository extends Neo4jRepository<Job, Long> {
     Page<Job> findByCountry(String country, Pageable pageable);
     Page<Job> findByCategory(String category, Pageable pageable);
 
-    @Query(value = "MATCH (j:Job)-[r:POSTED_BY]->(c:Company) " +
-                   "WHERE toLower(j.title) CONTAINS toLower($keyword) " +
-                   "OR toLower(c.name) CONTAINS toLower($keyword) " +
-                   "OR toLower(j.country) CONTAINS toLower($keyword) " +
-                   "OR toLower(j.location) CONTAINS toLower($keyword) " +
-                   "RETURN j, collect(r), collect(c)",
-           countQuery = "MATCH (j:Job)-[:POSTED_BY]->(c:Company) " +
-                        "WHERE toLower(j.title) CONTAINS toLower($keyword) " +
-                        "OR toLower(c.name) CONTAINS toLower($keyword) " +
-                        "OR toLower(j.country) CONTAINS toLower($keyword) " +
-                        "OR toLower(j.location) CONTAINS toLower($keyword) " +
+    @Query(value = "MATCH (j:Job) " +
+           "WHERE j.title IS NOT NULL AND toLower(j.title) CONTAINS toLower($keyword) " +
+           "OR j.companyName IS NOT NULL AND toLower(j.companyName) CONTAINS toLower($keyword) " +
+           "OR j.country IS NOT NULL AND toLower(j.country) CONTAINS toLower($keyword) " +
+           "OR j.location IS NOT NULL AND toLower(j.location) CONTAINS toLower($keyword) " +
+           "RETURN j",
+           countQuery = "MATCH (j:Job) " +
+                        "WHERE j.title IS NOT NULL AND toLower(j.title) CONTAINS toLower($keyword) " +
+                        "OR j.companyName IS NOT NULL AND toLower(j.companyName) CONTAINS toLower($keyword) " +
+                        "OR j.country IS NOT NULL AND toLower(j.country) CONTAINS toLower($keyword) " +
+                        "OR j.location IS NOT NULL AND toLower(j.location) CONTAINS toLower($keyword) " +
                         "RETURN count(j)")
     Page<Job> searchJobsByKeyword(@Param("keyword") String keyword, Pageable pageable);
 

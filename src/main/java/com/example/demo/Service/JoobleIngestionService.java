@@ -2,7 +2,6 @@ package com.example.demo.Service;
 
 import com.example.demo.Entity.Company;
 import com.example.demo.Entity.Job;
-import com.example.demo.Repository.CompanyRepository;
 import com.example.demo.Repository.JobRepository;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -15,7 +14,6 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestTemplate;
 
 import java.time.LocalDateTime;
@@ -39,10 +37,10 @@ public class JoobleIngestionService {
 
     private final String BASE_URL = "https://jooble.org/api/";
 
-    public JoobleIngestionService(JobRepository jobRepository, RestTemplate restTemplate, ObjectMapper objectMapper, EntityResolutionService entityResolutionService, NerExtractionService nerExtractionService) {
+    public JoobleIngestionService(JobRepository jobRepository, EntityResolutionService entityResolutionService, NerExtractionService nerExtractionService) {
         this.jobRepository = jobRepository;
-        this.restTemplate = restTemplate;
-        this.objectMapper = objectMapper;
+        this.restTemplate = new RestTemplate();
+        this.objectMapper = new ObjectMapper();
         this.entityResolutionService = entityResolutionService;
         this.nerExtractionService = nerExtractionService;
     }
@@ -95,7 +93,7 @@ public class JoobleIngestionService {
                         log.warn("Jooble - Received response without 'jobs' array on page {}", page);
                     }
 
-                    Thread.sleep(1000); // Rate limiting
+                    Thread.sleep(1000);
 
                 } catch (Exception e) {
                     log.error("Jooble - Error importing page {}: {}", page, e.getMessage());
@@ -141,21 +139,6 @@ public class JoobleIngestionService {
             job = new Job(jobId, title, jobLocation, "Unknown", url, category, description, company);
         }
 
-        if (jobNode.has("title") && !jobNode.get("title").isNull()) {
-            job.setTitle(jobNode.path("title").asText());
-        }
-        if (jobNode.has("snippet") && !jobNode.get("snippet").isNull()) {
-            job.setDescription(jobNode.path("snippet").asText());
-        }
-        if (jobNode.has("type") && !jobNode.get("type").isNull()) {
-            job.setContractType(jobNode.path("type").asText());
-        }
-        if (jobNode.has("salary") && !jobNode.get("salary").isNull()) {
-            String salaryStr = jobNode.path("salary").asText();
-            if (!salaryStr.isEmpty() && !salaryStr.equals("null")) {
-                job.setSalaryPeriod(salaryStr);
-            }
-        }
         if (jobNode.has("updated") && !jobNode.get("updated").isNull()) {
             try {
                 String dateStr = jobNode.path("updated").asText();

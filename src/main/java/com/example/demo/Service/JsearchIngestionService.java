@@ -41,10 +41,10 @@ public class JsearchIngestionService {
 
     private final String BASE_URL = "https://jsearch.p.rapidapi.com/search";
 
-    public JsearchIngestionService(JobRepository jobRepository, RestTemplate restTemplate, ObjectMapper objectMapper, EntityResolutionService entityResolutionService, NerExtractionService nerExtractionService) {
+    public JsearchIngestionService(JobRepository jobRepository, EntityResolutionService entityResolutionService, NerExtractionService nerExtractionService) {
         this.jobRepository = jobRepository;
-        this.restTemplate = restTemplate;
-        this.objectMapper = objectMapper;
+        this.restTemplate = new RestTemplate();
+        this.objectMapper = new ObjectMapper();
         this.entityResolutionService = entityResolutionService;
         this.nerExtractionService = nerExtractionService;
     }
@@ -181,7 +181,7 @@ public class JsearchIngestionService {
                 String dateStr = jobNode.path("job_posted_at_datetime_utc").asText();
                 if(dateStr.length() >= 19) {
                      LocalDateTime ldt = LocalDateTime.parse(dateStr.substring(0, 19));
-                     job.setCreatedAt(ldt); // Use the correct field
+                     job.setCreatedAt(ldt);
                 }
              } catch (Exception e) {
                  log.warn("JSearch - Could not parse posted date: {}", e.getMessage());
@@ -195,8 +195,6 @@ public class JsearchIngestionService {
         }
 
         Job savedJob = jobRepository.save(job);
-        
-        // Run NER extraction after saving
         nerExtractionService.processJob(savedJob);
 
         return true;

@@ -2,7 +2,6 @@ package com.example.demo.Service;
 
 import com.example.demo.Entity.Company;
 import com.example.demo.Entity.Job;
-import com.example.demo.Repository.CompanyRepository;
 import com.example.demo.Repository.JobRepository;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -10,7 +9,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestTemplate;
 
 import java.time.Instant;
@@ -31,10 +29,10 @@ public class ArbeitnowIngestionService {
 
     private final String BASE_URL = "https://www.arbeitnow.com/api/job-board-api";
 
-    public ArbeitnowIngestionService(JobRepository jobRepository, RestTemplate restTemplate, ObjectMapper objectMapper, EntityResolutionService entityResolutionService, NerExtractionService nerExtractionService) {
+    public ArbeitnowIngestionService(JobRepository jobRepository, EntityResolutionService entityResolutionService, NerExtractionService nerExtractionService) {
         this.jobRepository = jobRepository;
-        this.restTemplate = restTemplate;
-        this.objectMapper = objectMapper;
+        this.restTemplate = new RestTemplate();
+        this.objectMapper = new ObjectMapper();
         this.entityResolutionService = entityResolutionService;
         this.nerExtractionService = nerExtractionService;
     }
@@ -89,27 +87,6 @@ public class ArbeitnowIngestionService {
             String description = jobNode.path("description").asText("No description available.");
 
             job = new Job(slug, title, location, "Unknown", url, "IT/Software", description, company);
-        }
-
-        if (jobNode.has("description") && !jobNode.get("description").isNull()) {
-            job.setDescription(jobNode.path("description").asText());
-        }
-        if (jobNode.has("title") && !jobNode.get("title").isNull()) {
-            job.setTitle(jobNode.path("title").asText());
-        }
-        if (jobNode.has("location") && !jobNode.get("location").isNull()) {
-            job.setLocation(jobNode.path("location").asText());
-        }
-
-        if (jobNode.has("job_types") && jobNode.get("job_types").isArray()) {
-            JsonNode jobTypes = jobNode.get("job_types");
-            if (jobTypes.size() > 0) {
-                job.setContractType(jobTypes.get(0).asText());
-            }
-        }
-
-        if (jobNode.has("remote") && !jobNode.get("remote").isNull()) {
-            job.setJobIsRemote(jobNode.path("remote").asBoolean());
         }
 
         if (jobNode.has("created_at") && !jobNode.get("created_at").isNull()) {

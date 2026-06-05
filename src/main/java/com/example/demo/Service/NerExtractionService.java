@@ -56,7 +56,6 @@ public class NerExtractionService {
             return;
         }
 
-        // --- Step 1: Rule-based extraction (Gazetteer matching) ---
         Set<String> extractedKeywords = extractKeywords(job.getDescription());
         Set<Skill> linkedSkills = new HashSet<>();
         for (String keyword : extractedKeywords) {
@@ -65,12 +64,11 @@ public class NerExtractionService {
         }
         log.info("Job ID {}: Extracted {} skills from dictionaries.", job.getId(), linkedSkills.size());
 
-        // --- Step 2: LLM-based extraction for complex/soft skills ---
         try {
             Set<String> llmExtractedSkills = askLLMForComplexEntities(job.getDescription(), extractedKeywords);
             for (String skillName : llmExtractedSkills) {
                 if (!skillName.isEmpty()) {
-                    Skill skill = findOrCreateSkill(skillName); // Reuse the same linking logic
+                    Skill skill = findOrCreateSkill(skillName);
                     linkedSkills.add(skill);
                 }
             }
@@ -79,7 +77,6 @@ public class NerExtractionService {
             log.error("Job ID {}: Failed to process LLM extraction. Reason: {}", job.getId(), e.getMessage());
         }
 
-        // --- Final Step: Update the job with all linked skills ---
         job.setSkills(linkedSkills);
         jobRepository.save(job);
         
@@ -100,7 +97,7 @@ public class NerExtractionService {
     }
 
     private Skill findOrCreateSkill(String name) {
-        String normalizedName = normalizeSkillName(name);
+        String normalizedName = normalizeName(name);
 
         Optional<Skill> exactMatch = skillRepository.findByName(normalizedName);
         if (exactMatch.isPresent()) {
@@ -110,7 +107,6 @@ public class NerExtractionService {
         Iterable<Skill> allSkills = skillRepository.findAll();
         for (Skill existingSkill : allSkills) {
             if (calculateSimilarity(normalizedName, existingSkill.getName()) > 0.90) {
-                log.debug("Linked extracted skill '{}' to existing node '{}'", normalizedName, existingSkill.getName());
                 return existingSkill;
             }
         }
@@ -119,7 +115,7 @@ public class NerExtractionService {
         return skillRepository.save(newSkill);
     }
 
-    private String normalizeSkillName(String name) {
+    private String normalizeName(String name) {
         return name.toLowerCase().trim();
     }
 
@@ -160,7 +156,8 @@ public class NerExtractionService {
         );
 
         String response = geminiAgentService.ask(prompt);
-        if (response == null || response.trim().isEmpty()) {
+        
+        if (response == null || response.trim().isEmpty() || response.toLowerCase().contains("error") || response.toLowerCase().contains("simulated")) {
             return new HashSet<>();
         }
 

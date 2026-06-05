@@ -2,29 +2,21 @@ import React, { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import JobCard from '../components/JobCard';
 import Pagination from '../components/Pagination';
+import authHeader from '../services/auth-header'; 
 
 const JobsPage = () => {
   const location = useLocation();
+  const searchFromState = location.state?.search || '';
   const countryFromState = location.state?.country || '';
   const categoryFromState = location.state?.category || '';
-  const searchFromState = location.state?.search || '';
 
-  // --- STATE INITIALIZATION ---
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(true);
   
-  // State for pagination
-  const [currentPage, setCurrentPage] = useState(0); // API is 0-indexed
+  const [currentPage, setCurrentPage] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
   const [jobsPerPage] = useState(20);
 
-  // State for filters
-  const [searchTerm, setSearchTerm] = useState(searchFromState);
-  const [selectedCountry, setSelectedCountry] = useState(countryFromState);
-  const [selectedCategory, setSelectedCategory] = useState(categoryFromState);
-  // ... other filters can be added here
-
-  // --- FETCH DATA ---
   useEffect(() => {
     const loadJobs = async () => {
       setLoading(true);
@@ -32,19 +24,19 @@ const JobsPage = () => {
       url.searchParams.append('page', currentPage);
       url.searchParams.append('size', jobsPerPage);
       
-      if (searchTerm) {
-        url.searchParams.append('search', searchTerm);
+      if (searchFromState) {
+        url.searchParams.append('search', searchFromState);
       } else {
-        if (selectedCountry) {
-          url.searchParams.append('country', selectedCountry);
+        if (countryFromState) {
+          url.searchParams.append('country', countryFromState);
         }
-        if (selectedCategory) {
-          url.searchParams.append('category', selectedCategory);
+        if (categoryFromState) {
+          url.searchParams.append('category', categoryFromState);
         }
       }
 
       try {
-        const response = await fetch(url);
+        const response = await fetch(url, { headers: authHeader() });
         if (!response.ok) throw new Error(`Server responded with ${response.status}`);
         const data = await response.json();
         
@@ -60,39 +52,26 @@ const JobsPage = () => {
       }
     };
     loadJobs();
-  }, [currentPage, searchTerm, selectedCountry, selectedCategory, jobsPerPage]); // Re-fetch when filters change
+  }, [currentPage, searchFromState, countryFromState, categoryFromState, jobsPerPage]);
 
-  // --- HANDLERS ---
   const handlePageChange = (pageNumber) => {
     setCurrentPage(pageNumber);
   };
 
-  // Reset page to 0 when filters change
-  useEffect(() => {
-    setCurrentPage(0);
-  }, [searchTerm, selectedCountry, selectedCategory]);
-
-  // --- STYLES ---
-  const styles = {
-    container: { padding: '40px', backgroundColor: '#f4f7f6', minHeight: '100vh', fontFamily: "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif" },
-    header: { textAlign: 'center', marginBottom: '40px', color: '#333' },
-    listContainer: { display: 'flex', flexDirection: 'column', gap: '20px', maxWidth: '900px', margin: '0 auto' },
-  };
-
   const getHeader = () => {
-    if (searchTerm) return `Search results for "${searchTerm}"`;
-    if (selectedCountry) return `Jobs in ${selectedCountry}`;
-    if (selectedCategory) return `Jobs in ${selectedCategory}`;
+    if (searchFromState) return `Search results for "${searchFromState}"`;
+    if (countryFromState) return `Jobs in ${countryFromState}`;
+    if (categoryFromState) return `Jobs in ${categoryFromState}`;
     return 'Find Your Dream Job';
   };
 
   if (loading) return <div style={{textAlign: 'center', marginTop: '50px', fontSize: '1.2rem'}}>Loading amazing jobs...</div>;
 
   return (
-    <div style={styles.container}>
-      <h1 style={styles.header}>{getHeader()}</h1>
+    <div style={{ padding: '40px', backgroundColor: '#f4f7f6', minHeight: '100vh' }}>
+      <h1 style={{ textAlign: 'center', margin: '0 auto 40px auto', color: '#333', maxWidth: '800px', lineHeight: '1.4' }}>{getHeader()}</h1>
 
-      <div style={styles.listContainer}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', maxWidth: '900px', margin: '0 auto' }}>
         {jobs.length > 0 ? jobs.map(job => (
           <JobCard key={job.id} job={job} />
         )) : <p style={{textAlign: 'center', color: '#777', marginTop: '30px'}}>No jobs found matching your criteria.</p>}

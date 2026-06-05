@@ -2,7 +2,6 @@ package com.example.demo.Service;
 
 import com.example.demo.Entity.Company;
 import com.example.demo.Entity.Job;
-import com.example.demo.Repository.CompanyRepository;
 import com.example.demo.Repository.JobRepository;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -10,11 +9,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestTemplate;
 
 import java.time.LocalDateTime;
-import java.time.OffsetDateTime;
 import java.util.Optional;
 
 @Service
@@ -28,22 +25,16 @@ public class RemotiveIngestionService {
     private final EntityResolutionService entityResolutionService;
     private final NerExtractionService nerExtractionService;
 
-    // Folosim categoria "software-dev" pentru a aduce doar joburi IT
     private final String BASE_URL = "https://remotive.com/api/remote-jobs?category=software-dev";
 
-    public RemotiveIngestionService(JobRepository jobRepository, RestTemplate restTemplate, ObjectMapper objectMapper, EntityResolutionService entityResolutionService, NerExtractionService nerExtractionService) {
+    public RemotiveIngestionService(JobRepository jobRepository, EntityResolutionService entityResolutionService, NerExtractionService nerExtractionService) {
         this.jobRepository = jobRepository;
-        this.restTemplate = restTemplate;
-        this.objectMapper = objectMapper;
+        this.restTemplate = new RestTemplate();
+        this.objectMapper = new ObjectMapper();
         this.entityResolutionService = entityResolutionService;
         this.nerExtractionService = nerExtractionService;
     }
 
-    /**
-     * Importă toate joburile (API-ul Remotive returnează toate joburile
-     * pentru categoria respectivă într-un singur request, nu are paginare
-     * în acest endpoint).
-     */
     @Async("taskExecutor")
     public void importJobs() {
         log.info("Remotive - Starting import for category 'software-dev'");
@@ -93,7 +84,6 @@ public class RemotiveIngestionService {
             String title = jobNode.path("title").asText("Untitled Job");
             String url = jobNode.path("url").asText("");
             
-            // Candidate required location (poate fi gol, "Worldwide", etc.)
             String location = jobNode.path("candidate_required_location").asText("");
             if (location.isEmpty() || location.equals("null")) location = "Worldwide";
             
@@ -103,33 +93,8 @@ public class RemotiveIngestionService {
             job = new Job(jobId, title, location, "Unknown", url, category, description, company);
         }
 
-        // --- UPDATE CÂMPURI ---
-        if (jobNode.has("description") && !jobNode.get("description").isNull()) {
-            job.setDescription(jobNode.path("description").asText());
-        }
-        if (jobNode.has("title") && !jobNode.get("title").isNull()) {
-            job.setTitle(jobNode.path("title").asText());
-        }
-        if (jobNode.has("candidate_required_location") && !jobNode.get("candidate_required_location").isNull()) {
-             job.setLocation(jobNode.path("candidate_required_location").asText());
-        }
-
-        if (jobNode.has("job_type") && !jobNode.get("job_type").isNull()) {
-            // Remotive returnează "full_time", "contract", etc. Le putem curăța.
-            String type = jobNode.path("job_type").asText().replace("_", " ");
-            job.setContractType(type);
-        }
-
-        if (jobNode.has("salary") && !jobNode.get("salary").isNull() && !jobNode.get("salary").asText().isEmpty()) {
-            job.setSalaryPeriod(jobNode.path("salary").asText()); // Remotive dă salariul ca un string "100k - 120k"
-        }
-
-        // Remotive jobs sunt remote.
-        job.setJobIsRemote(true);
-
         if (jobNode.has("publication_date") && !jobNode.get("publication_date").isNull()) {
              try {
-                // "2024-05-19T06:40:27"
                 String dateStr = jobNode.path("publication_date").asText();
                 if(dateStr.length() >= 19) {
                      LocalDateTime ldt = LocalDateTime.parse(dateStr.substring(0, 19));

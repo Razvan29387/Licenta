@@ -25,7 +25,6 @@ public class AdzunaIngestionService {
     private static final Logger log = LoggerFactory.getLogger(AdzunaIngestionService.class);
 
     private final JobRepository jobRepository;
-    private final CompanyRepository companyRepository;
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;
     private final BatchJobUpdateService batchJobUpdateService;
@@ -40,9 +39,8 @@ public class AdzunaIngestionService {
 
     private final String BASE_URL = "https://api.adzuna.com/v1/api/jobs";
 
-    public AdzunaIngestionService(JobRepository jobRepository, CompanyRepository companyRepository, BatchJobUpdateService batchJobUpdateService, EntityResolutionService entityResolutionService, NerExtractionService nerExtractionService) {
+    public AdzunaIngestionService(JobRepository jobRepository, BatchJobUpdateService batchJobUpdateService, EntityResolutionService entityResolutionService, NerExtractionService nerExtractionService) {
         this.jobRepository = jobRepository;
-        this.companyRepository = companyRepository;
         this.restTemplate = new RestTemplate();
         this.objectMapper = new ObjectMapper();
         this.batchJobUpdateService = batchJobUpdateService;
@@ -77,7 +75,6 @@ public class AdzunaIngestionService {
         }
         log.info("Adzuna ({}) - Import finished.", country.toUpperCase());
 
-        // Apelează automat batch update-ul pentru a actualiza toți joburile cu remote status și contract type
         log.info("Adzuna ({}) - Starting automatic batch update for remote status and contract type...", country.toUpperCase());
         batchJobUpdateService.updateAllJobsWithRemoteAndContractType();
     }
@@ -85,20 +82,16 @@ public class AdzunaIngestionService {
     private void saveOrUpdateJob(JsonNode jobNode, String countryCode) {
         String adzunaId = jobNode.path("id").asText();
 
-        // 1. Găsim compania folosind EntityResolutionService
         String companyName = jobNode.path("company").path("display_name").asText("Unknown Company").trim();
         Company company = entityResolutionService.findOrCreateCompany(companyName);
 
-        // 2. Verificăm dacă jobul există deja
         Optional<Job> existingJobOpt = jobRepository.findByAdzunaId(adzunaId);
         Job job;
 
         if (existingJobOpt.isPresent()) {
-            // Dacă există, îl folosim pe cel din DB pentru a-i face update
             job = existingJobOpt.get();
-            job.setCompany(company); // Ne asigurăm că are o companie asociată
+            job.setCompany(company);
         } else {
-            // Dacă nu există, instanțiem unul nou cu detaliile de bază
             String title = jobNode.path("title").asText();
             String url = jobNode.path("redirect_url").asText();
             String location = jobNode.path("location").path("display_name").asText("Unknown Location");
@@ -109,9 +102,6 @@ public class AdzunaIngestionService {
             job = new Job(adzunaId, title, location, country, url, category, description, company);
         }
 
-        // --- 3. ACTUALIZĂM TOATE CÂMPURILE (Aplicabil și pentru Job Nou și pentru Update) ---
-
-        // Suprascriem descrierea și titlul în caz că angajatorul le-a modificat
         if (jobNode.has("description") && !jobNode.get("description").isNull()) {
             job.setDescription(jobNode.path("description").asText());
         }
@@ -119,59 +109,6 @@ public class AdzunaIngestionService {
             job.setTitle(jobNode.path("title").asText());
         }
 
-        // Salarii
-        if (jobNode.has("salary_min") && !jobNode.get("salary_min").isNull()) {
-            job.setSalaryMin(jobNode.path("salary_min").asDouble());
-        }
-        if (jobNode.has("salary_max") && !jobNode.get("salary_max").isNull()) {
-            job.setSalaryMax(jobNode.path("salary_max").asDouble());
-        }
-        if (job.getSalaryMin() != null || job.getSalaryMax() != null) {
-            job.setSalaryPeriod("year");
-        }
-
-        // Predicție Salariu
-        if (jobNode.has("salary_is_predicted") && !jobNode.get("salary_is_predicted").isNull()) {
-            job.setSalaryIsPredicted(jobNode.path("salary_is_predicted").asInt() == 1);
-        }
-
-        // Coordonate GPS
-        if (jobNode.has("latitude") && !jobNode.get("latitude").isNull()) {
-            job.setLatitude(jobNode.path("latitude").asDouble());
-        }
-        if (jobNode.has("longitude") && !jobNode.get("longitude").isNull()) {
-            job.setLongitude(jobNode.path("longitude").asDouble());
-        }
-
-        // Detalii Locație (Array)
-        JsonNode locationAreaNode = jobNode.path("location").path("area");
-        if (locationAreaNode.isArray()) {
-            List<String> areas = new ArrayList<>();
-            for (JsonNode area : locationAreaNode) {
-                areas.add(area.asText());
-            }
-            job.setLocationArea(areas);
-        }
-
-        // Detalii Categorie (Tag)
-        if (jobNode.path("category").has("tag")) {
-            job.setCategoryTag(jobNode.path("category").path("tag").asText());
-        }
-
-        // Tip Contract
-        if (jobNode.has("contract_type") && !jobNode.get("contract_type").isNull()) {
-            job.setContractType(jobNode.path("contract_type").asText());
-        }
-
-        // Remote status - verific în description sau din response
-        boolean isRemote = false;
-        if (jobNode.has("description") && !jobNode.get("description").isNull()) {
-            String desc = jobNode.path("description").asText().toLowerCase();
-            isRemote = desc.contains("remote") || desc.contains("work from home") || desc.contains("wfh");
-        }
-        job.setJobIsRemote(isRemote);
-
-        // Data Creării
         if (jobNode.has("created") && !jobNode.get("created").isNull()) {
             try {
                 OffsetDateTime odt = OffsetDateTime.parse(jobNode.path("created").asText());
@@ -181,17 +118,14 @@ public class AdzunaIngestionService {
             }
         }
 
-        job.setCompanyName(company.getName()); // Use the resolved name
+        job.setCompanyName(company.getName());
 
-        // Ensure createdAt is set to the current time (for new jobs or updates)
         if (job.getCreatedAt() == null) {
             job.setCreatedAt(java.time.LocalDateTime.now());
         }
 
-        // 4. Salvare în baza de date (dacă e job vechi va face UPDATE, dacă e nou va face INSERT)
         Job savedJob = jobRepository.save(job);
         
-        // 5. Rulăm extragerea NER
         nerExtractionService.processJob(savedJob);
     }
 }

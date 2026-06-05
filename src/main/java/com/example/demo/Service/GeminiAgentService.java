@@ -30,19 +30,11 @@ public class GeminiAgentService {
         this.objectMapper = new ObjectMapper();
     }
 
-    /**
-     * A general-purpose method to ask the Gemini model a question.
-     * @param userPrompt The question or instruction for the AI.
-     * @return The text response from the AI.
-     */
     public String ask(String userPrompt) {
         String systemInstruction = "You are a helpful assistant. Respond concisely and accurately.";
         return callGemini(systemInstruction, userPrompt, false);
     }
 
-    /**
-     * Agent 1: Job Description Optimizer
-     */
     public String optimizeJobDescription(String title, String rawNotes, String category) {
         String systemInstruction = "You are an expert IT HR Recruiter. Your task is to take brief notes provided by a company representative and transform them into a highly professional, attractive, and well-structured job description. Include standard sections like 'About the Role', 'Key Responsibilities', 'Requirements', and 'Benefits'. Use markdown bullet points for readability. Be concise but engaging.";
         String userPrompt = String.format("Job Title: %s\nCategory: %s\nRaw Notes/Keywords: %s\n\nPlease generate the full job description.", title, category, rawNotes);
@@ -50,9 +42,6 @@ public class GeminiAgentService {
         return callGemini(systemInstruction, userPrompt, false);
     }
 
-    /**
-     * Agent 2: Candidate Matchmaker (CV Screener)
-     */
     public String evaluateCandidateCV(String jobDescription, String candidateCv) {
         String systemInstruction = "You are an expert HR AI Assistant. Your job is to evaluate a candidate's CV against a specific Job Description. You must return ONLY a JSON object with two fields: 'score' (an integer between 0 and 100 representing the match percentage) and 'feedback' (a short 2-sentence explanation of why you gave this score, highlighting pros and cons). Do not wrap the JSON in markdown code blocks like ```json, just return the raw JSON string.";
         String userPrompt = String.format("Job Description:\n%s\n\nCandidate CV:\n%s", jobDescription, candidateCv);
@@ -65,10 +54,7 @@ public class GeminiAgentService {
             if(requireJson) {
                 return "{\"score\": 88, \"feedback\": \"Simulated Gemini evaluation: Excellent match on primary skills, but lacks the required cloud experience.\"}";
             } else {
-                return "This is a simulated **Gemini** AI response because the API key is missing.\n\n" +
-                       "**About the Role**\nWe are looking for a fantastic candidate...\n\n" +
-                       "**Responsibilities**\n- Build scalable systems\n- Collaborate with teams\n\n" +
-                       "**Requirements**\n- 3+ years experience\n- Positive attitude";
+                return "This is a simulated **Gemini** AI response because the API key is missing.";
             }
         }
 

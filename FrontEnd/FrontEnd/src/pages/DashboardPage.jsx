@@ -49,7 +49,6 @@ const DashboardPage = () => {
       navigate('/jobs', { state: { [filterType]: value } });
   };
 
-  // Funcție pentru a returna steagul corect pe baza numelui țării
   const getFlagForCountry = (countryName) => {
     const flags = {
       'gb': '🇬🇧', 'uk': '🇬🇧', 'united kingdom': '🇬🇧',
@@ -67,7 +66,7 @@ const DashboardPage = () => {
       'at': '🇦🇹', 'austria': '🇦🇹',
       'ch': '🇨🇭', 'switzerland': '🇨🇭',
       'ro': '🇷🇴', 'romania': '🇷🇴',
-      'fb': '🇧🇷' // adaug si fallback-ul cerut pentru 'fb'
+      'fb': '🇧🇷'
     };
     
     if (!countryName) return '🌍';
@@ -77,7 +76,6 @@ const DashboardPage = () => {
         return flags[lowerName];
     }
     
-    // Fallback logic
     if (countryName.length === 2) {
          try {
             const codePoints = countryName.toUpperCase().split('').map(char => 127397 + char.charCodeAt());
@@ -90,7 +88,6 @@ const DashboardPage = () => {
     return '🌍';
   };
 
-  // Funcție pentru a returna o iconiță sugestivă pentru categorii
   const getIconForCategory = (categoryName) => {
     if (!categoryName) return '📁';
     const lowerCat = categoryName.toLowerCase();
@@ -99,12 +96,7 @@ const DashboardPage = () => {
     if (lowerCat.includes('design') || lowerCat.includes('ui') || lowerCat.includes('ux')) return '🎨';
     if (lowerCat.includes('market') || lowerCat.includes('seo')) return '📈';
     if (lowerCat.includes('sale') || lowerCat.includes('business')) return '💼';
-    if (lowerCat.includes('financ') || lowerCat.includes('account')) return '💰';
-    if (lowerCat.includes('hr') || lowerCat.includes('human')) return '🤝';
-    if (lowerCat.includes('engineer')) return '⚙️';
-    if (lowerCat.includes('admin') || lowerCat.includes('office')) return '🗄️';
-    if (lowerCat.includes('health') || lowerCat.includes('medic')) return '⚕️';
-    return '📁'; // Fallback
+    return '📁';
   };
 
   const getIconForLanguage = (languageName) => {
@@ -114,10 +106,7 @@ const DashboardPage = () => {
     if (lowerLang.includes('python')) return '🐍';
     if (lowerLang.includes('javascript') || lowerLang.includes('js') || lowerLang.includes('node') || lowerLang.includes('typescript')) return '📜';
     if (lowerLang.includes('c#') || lowerLang.includes('.net') || lowerLang.includes('c++') || lowerLang.includes('c')) return '⚙️';
-    if (lowerLang.includes('php') || lowerLang.includes('ruby')) return '🐘';
-    if (lowerLang.includes('go') || lowerLang.includes('rust')) return '🚀';
-    if (lowerLang.includes('sql') || lowerLang.includes('database')) return '🗄️';
-    return '⌨️'; // Fallback
+    return '⌨️';
   };
 
   return (
@@ -130,7 +119,7 @@ const DashboardPage = () => {
 
         <h1 className="hero-title">Find Your Next Opportunity</h1>
         <p className="hero-subtitle">
-          Explore over <strong>{stats.totalJobs}</strong> jobs from <strong>{stats.totalCompanies}</strong> companies and <strong>{stats.totalApplications}</strong> applications worldwide.
+          Explore over <strong>{stats.totalJobs}</strong> jobs from <strong>{stats.totalCompanies}</strong> companies.
         </p>
         
         <div className="search-container">
@@ -168,9 +157,7 @@ const DashboardPage = () => {
         <div className="grid-container">
           {stats.jobsByCountry && stats.jobsByCountry.length > 0 && (
               <div className="stats-grid-section">
-                  <h3 className="grid-title">
-                      Popular Locations
-                  </h3>
+                  <h3 className="grid-title">Popular Locations</h3>
                   <div className="grid">
                       {stats.jobsByCountry.map((item, index) => (
                           <div 
@@ -189,9 +176,7 @@ const DashboardPage = () => {
 
           {stats.jobsByCategory && stats.jobsByCategory.length > 0 && (
               <div className="stats-grid-section">
-                  <h3 className="grid-title">
-                      Popular Categories
-                  </h3>
+                  <h3 className="grid-title">Popular Categories</h3>
                   <div className="grid">
                       {stats.jobsByCategory.map((item, index) => (
                           <div 
@@ -210,9 +195,7 @@ const DashboardPage = () => {
 
           {stats.jobsByLanguage && stats.jobsByLanguage.length > 0 && (
               <div className="stats-grid-section">
-                  <h3 className="grid-title">
-                      Popular Programming Languages
-                  </h3>
+                  <h3 className="grid-title">Popular Programming Languages</h3>
                   <div className="grid">
                       {stats.jobsByLanguage.map((item, index) => (
                           <div 
