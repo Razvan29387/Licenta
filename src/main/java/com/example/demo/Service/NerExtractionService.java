@@ -2,8 +2,10 @@ package com.example.demo.Service;
 
 import com.example.demo.Entity.Job;
 import com.example.demo.Entity.Skill;
+import com.example.demo.Entity.Occupation;
 import com.example.demo.Repository.JobRepository;
 import com.example.demo.Repository.SkillRepository;
+import com.example.demo.Repository.OccupationRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Async;
@@ -22,9 +24,11 @@ public class NerExtractionService {
     private static final Logger log = LoggerFactory.getLogger(NerExtractionService.class);
 
     private final SkillRepository skillRepository;
+    private final OccupationRepository occupationRepository;
     private final JobRepository jobRepository;
     private final GeminiAgentService geminiAgentService;
 
+    // --- Gazetteers ---
     private static final Set<String> PROGRAMMING_LANGUAGES = new HashSet<>(Arrays.asList(
             "java", "python", "javascript", "typescript", "c++", "c#", "ruby", "go", "php", "swift", "kotlin", "scala", "rust", "sql"
     ));
@@ -37,6 +41,14 @@ public class NerExtractionService {
             "docker", "kubernetes", "aws", "azure", "gcp", "mysql", "postgresql", "mongodb", "redis", "elasticsearch", "git", "jenkins", "terraform", "linux"
     ));
 
+    private static final Set<String> OCCUPATIONS = new HashSet<>(Arrays.asList(
+            "software engineer", "developer", "data scientist", "data analyst", "devops engineer", 
+            "product manager", "project manager", "qa engineer", "system administrator", 
+            "cloud architect", "security analyst", "cyber security", "frontend developer", 
+            "backend developer", "fullstack developer", "mobile developer", "ui/ux designer",
+            "machine learning engineer", "ai engineer"
+    ));
+
     private static final Set<String> ALL_KNOWN_SKILLS = new HashSet<>();
     static {
         ALL_KNOWN_SKILLS.addAll(PROGRAMMING_LANGUAGES);
@@ -44,8 +56,9 @@ public class NerExtractionService {
         ALL_KNOWN_SKILLS.addAll(TECHNOLOGIES);
     }
 
-    public NerExtractionService(SkillRepository skillRepository, JobRepository jobRepository, GeminiAgentService geminiAgentService) {
+    public NerExtractionService(SkillRepository skillRepository, OccupationRepository occupationRepository, JobRepository jobRepository, GeminiAgentService geminiAgentService) {
         this.skillRepository = skillRepository;
+        this.occupationRepository = occupationRepository;
         this.jobRepository = jobRepository;
         this.geminiAgentService = geminiAgentService;
     }
@@ -56,20 +69,30 @@ public class NerExtractionService {
             return;
         }
 
-        Set<String> extractedKeywords = extractKeywords(job.getDescription());
+        // --- Step 1: Rule-based extraction (Gazetteer matching) ---
+        // Skills (from description)
+        Set<String> extractedSkills = extractKeywords(job.getDescription(), ALL_KNOWN_SKILLS);
         Set<Skill> linkedSkills = new HashSet<>();
-        for (String keyword : extractedKeywords) {
-            Skill skill = findOrCreateSkill(keyword);
-            linkedSkills.add(skill);
+        for (String keyword : extractedSkills) {
+            linkedSkills.add(findOrCreateSkill(keyword));
         }
-        log.info("Job ID {}: Extracted {} skills from dictionaries.", job.getId(), linkedSkills.size());
 
+        // Occupations (from title and description)
+        String titleAndDesc = job.getTitle() + " " + job.getDescription();
+        Set<String> extractedOccupations = extractKeywords(titleAndDesc, OCCUPATIONS);
+        Set<Occupation> linkedOccupations = new HashSet<>();
+        for (String keyword : extractedOccupations) {
+            linkedOccupations.add(findOrCreateOccupation(keyword));
+        }
+
+        log.info("Job ID {}: Extracted {} skills and {} occupations from dictionaries.", job.getId(), linkedSkills.size(), linkedOccupations.size());
+
+        // --- Step 2: LLM-based extraction for complex/soft skills ---
         try {
-            Set<String> llmExtractedSkills = askLLMForComplexEntities(job.getDescription(), extractedKeywords);
+            Set<String> llmExtractedSkills = askLLMForComplexEntities(job.getDescription(), extractedSkills);
             for (String skillName : llmExtractedSkills) {
                 if (!skillName.isEmpty()) {
-                    Skill skill = findOrCreateSkill(skillName);
-                    linkedSkills.add(skill);
+                    linkedSkills.add(findOrCreateSkill(skillName));
                 }
             }
             log.info("Job ID {}: Added {} skills from LLM analysis.", job.getId(), llmExtractedSkills.size());
@@ -77,20 +100,22 @@ public class NerExtractionService {
             log.error("Job ID {}: Failed to process LLM extraction. Reason: {}", job.getId(), e.getMessage());
         }
 
+        // --- Final Step: Update the job with all linked entities ---
         job.setSkills(linkedSkills);
+        job.setOccupations(linkedOccupations);
         jobRepository.save(job);
         
-        log.info("Finished NER processing for job ID {}. Total skills linked: {}", job.getId(), linkedSkills.size());
+        log.info("Finished NER processing for job ID {}. Linked {} skills, {} occupations.", job.getId(), linkedSkills.size(), linkedOccupations.size());
     }
 
-    private Set<String> extractKeywords(String text) {
+    private Set<String> extractKeywords(String text, Set<String> dictionary) {
         Set<String> found = new HashSet<>();
         String lowerText = " " + text.toLowerCase().replaceAll("[^a-z0-9+#.\\-]", " ") + " ";
 
-        for (String skill : ALL_KNOWN_SKILLS) {
-            String pattern = ".*\\b" + Pattern.quote(skill) + "\\b.*";
+        for (String item : dictionary) {
+            String pattern = ".*\\b" + Pattern.quote(item) + "\\b.*";
             if (lowerText.matches(pattern)) {
-                found.add(skill);
+                found.add(item);
             }
         }
         return found;
@@ -113,6 +138,25 @@ public class NerExtractionService {
 
         Skill newSkill = new Skill(normalizedName);
         return skillRepository.save(newSkill);
+    }
+
+    private Occupation findOrCreateOccupation(String name) {
+        String normalizedName = normalizeName(name);
+
+        Optional<Occupation> exactMatch = occupationRepository.findByName(normalizedName);
+        if (exactMatch.isPresent()) {
+            return exactMatch.get();
+        }
+
+        Iterable<Occupation> allOccupations = occupationRepository.findAll();
+        for (Occupation existingOcc : allOccupations) {
+            if (calculateSimilarity(normalizedName, existingOcc.getName()) > 0.90) {
+                return existingOcc;
+            }
+        }
+
+        Occupation newOcc = new Occupation(normalizedName);
+        return occupationRepository.save(newOcc);
     }
 
     private String normalizeName(String name) {

@@ -15,22 +15,17 @@ public interface JobRepository extends Neo4jRepository<Job, Long> {
     boolean existsByAdzunaId(String adzunaId);
     Optional<Job> findByAdzunaId(String adzunaId);
 
-    Page<Job> findByCountry(String country, Pageable pageable);
-    Page<Job> findByCategory(String category, Pageable pageable);
-
     @Query(value = "MATCH (j:Job) " +
-           "WHERE j.title IS NOT NULL AND toLower(j.title) CONTAINS toLower($keyword) " +
-           "OR j.companyName IS NOT NULL AND toLower(j.companyName) CONTAINS toLower($keyword) " +
-           "OR j.country IS NOT NULL AND toLower(j.country) CONTAINS toLower($keyword) " +
-           "OR j.location IS NOT NULL AND toLower(j.location) CONTAINS toLower($keyword) " +
+           "WHERE ($keyword = '' OR j.title IS NOT NULL AND toLower(j.title) CONTAINS $keyword OR j.companyName IS NOT NULL AND toLower(j.companyName) CONTAINS $keyword OR j.location IS NOT NULL AND toLower(j.location) CONTAINS $keyword) " +
+           "AND ($country = '' OR j.country IS NOT NULL AND toLower(j.country) = $country) " +
+           "AND ($category = '' OR j.category IS NOT NULL AND toLower(j.category) = $category) " +
            "RETURN j",
            countQuery = "MATCH (j:Job) " +
-                        "WHERE j.title IS NOT NULL AND toLower(j.title) CONTAINS toLower($keyword) " +
-                        "OR j.companyName IS NOT NULL AND toLower(j.companyName) CONTAINS toLower($keyword) " +
-                        "OR j.country IS NOT NULL AND toLower(j.country) CONTAINS toLower($keyword) " +
-                        "OR j.location IS NOT NULL AND toLower(j.location) CONTAINS toLower($keyword) " +
+                        "WHERE ($keyword = '' OR j.title IS NOT NULL AND toLower(j.title) CONTAINS $keyword OR j.companyName IS NOT NULL AND toLower(j.companyName) CONTAINS $keyword OR j.location IS NOT NULL AND toLower(j.location) CONTAINS $keyword) " +
+                        "AND ($country = '' OR j.country IS NOT NULL AND toLower(j.country) = $country) " +
+                        "AND ($category = '' OR j.category IS NOT NULL AND toLower(j.category) = $category) " +
                         "RETURN count(j)")
-    Page<Job> searchJobsByKeyword(@Param("keyword") String keyword, Pageable pageable);
+    Page<Job> searchAndFilterJobs(@Param("keyword") String keyword, @Param("country") String country, @Param("category") String category, Pageable pageable);
 
     @Query("MATCH (j:Job)-[:POSTED_BY]->(c:Company) WHERE c.name = $companyName RETURN j, c")
     List<Job> findByCompanyName(@Param("companyName") String companyName);

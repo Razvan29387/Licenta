@@ -75,8 +75,9 @@ public class WebSecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth ->
                         auth.requestMatchers("/api/auth/**").permitAll()
+                            .requestMatchers("/ws/**").permitAll() // Allow WebSocket connections
                             .requestMatchers(HttpMethod.GET, "/api/jobs/**", "/api/stats").permitAll()
-                            .requestMatchers("/api/maintenance/**", "/api/backups/**").permitAll() // Temporarily allow public access
+                            .requestMatchers("/api/maintenance/**", "/api/backups/**").permitAll()
                             .anyRequest().authenticated()
                 );
 

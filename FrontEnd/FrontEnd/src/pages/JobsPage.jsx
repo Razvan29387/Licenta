@@ -26,13 +26,12 @@ const JobsPage = () => {
       
       if (searchFromState) {
         url.searchParams.append('search', searchFromState);
-      } else {
-        if (countryFromState) {
-          url.searchParams.append('country', countryFromState);
-        }
-        if (categoryFromState) {
-          url.searchParams.append('category', categoryFromState);
-        }
+      }
+      if (countryFromState) {
+        url.searchParams.append('country', countryFromState);
+      }
+      if (categoryFromState) {
+        url.searchParams.append('category', categoryFromState);
       }
 
       try {

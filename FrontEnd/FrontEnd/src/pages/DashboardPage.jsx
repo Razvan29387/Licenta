@@ -9,7 +9,7 @@ const DashboardPage = () => {
     totalApplications: 0, 
     jobsByCountry: [],
     jobsByCategory: [],
-    jobsByLanguage: []
+    jobsBySkill: [] // Added skills
   });
   const [searchTerm, setSearchTerm] = useState('');
   const navigate = useNavigate();
@@ -26,7 +26,7 @@ const DashboardPage = () => {
               totalApplications: data.totalApplications || 0,
               jobsByCountry: data.jobsByCountry || [],
               jobsByCategory: data.jobsByCategory || [],
-              jobsByLanguage: data.jobsByLanguage || []
+              jobsBySkill: data.jobsBySkill || [] // Added skills
           });
         }
       } catch (error) {
@@ -99,14 +99,18 @@ const DashboardPage = () => {
     return '📁';
   };
 
-  const getIconForLanguage = (languageName) => {
-    if (!languageName) return '⌨️';
-    const lowerLang = languageName.toLowerCase();
-    if (lowerLang.includes('java') || lowerLang.includes('kotlin') || lowerLang.includes('scala')) return '☕';
-    if (lowerLang.includes('python')) return '🐍';
-    if (lowerLang.includes('javascript') || lowerLang.includes('js') || lowerLang.includes('node') || lowerLang.includes('typescript')) return '📜';
-    if (lowerLang.includes('c#') || lowerLang.includes('.net') || lowerLang.includes('c++') || lowerLang.includes('c')) return '⚙️';
-    return '⌨️';
+  const getIconForSkill = (skillName) => {
+    if (!skillName) return '🔧';
+    const lowerSkill = skillName.toLowerCase();
+    if (lowerSkill.includes('java') || lowerSkill.includes('kotlin') || lowerSkill.includes('scala')) return '☕';
+    if (lowerSkill.includes('python')) return '🐍';
+    if (lowerSkill.includes('javascript') || lowerSkill.includes('js') || lowerSkill.includes('node') || lowerSkill.includes('typescript')) return '📜';
+    if (lowerSkill.includes('c#') || lowerSkill.includes('.net') || lowerSkill.includes('c++') || lowerSkill.includes('c')) return '⚙️';
+    if (lowerSkill.includes('react') || lowerSkill.includes('angular') || lowerSkill.includes('vue')) return '⚛️';
+    if (lowerSkill.includes('aws') || lowerSkill.includes('azure') || lowerSkill.includes('gcp')) return '☁️';
+    if (lowerSkill.includes('docker') || lowerSkill.includes('kubernetes')) return '🐳';
+    if (lowerSkill.includes('sql')) return '🗃️';
+    return '🔧';
   };
 
   return (
@@ -193,18 +197,18 @@ const DashboardPage = () => {
               </div>
           )}
 
-          {stats.jobsByLanguage && stats.jobsByLanguage.length > 0 && (
+          {stats.jobsBySkill && stats.jobsBySkill.length > 0 && (
               <div className="stats-grid-section">
-                  <h3 className="grid-title">Popular Programming Languages</h3>
+                  <h3 className="grid-title">Top Skills</h3>
                   <div className="grid">
-                      {stats.jobsByLanguage.map((item, index) => (
+                      {stats.jobsBySkill.map((item, index) => (
                           <div 
-                              key={`language-${index}`} 
+                              key={`skill-${index}`} 
                               className="grid-card"
-                              onClick={() => handleFilterClick('search', item.language)}
+                              onClick={() => handleFilterClick('search', item.skill)}
                           >
-                              <span>{getIconForLanguage(item.language)}</span>
-                              <span className="grid-name">{item.language}</span>
+                              <span>{getIconForSkill(item.skill)}</span>
+                              <span className="grid-name">{item.skill}</span>
                               <span className="grid-count">{item.count} jobs</span>
                           </div>
                       ))}

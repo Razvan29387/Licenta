@@ -47,6 +47,9 @@ public class Job {
     @Relationship(type = "HAS_SKILL", direction = Relationship.Direction.OUTGOING)
     private Set<Skill> skills = new HashSet<>();
 
+    @Relationship(type = "HAS_OCCUPATION", direction = Relationship.Direction.OUTGOING)
+    private Set<Occupation> occupations = new HashSet<>();
+
     public Job() {
         this.createdAt = LocalDateTime.now();
     }
@@ -143,4 +146,7 @@ public class Job {
 
     public Set<Skill> getSkills() { return skills; }
     public void setSkills(Set<Skill> skills) { this.skills = skills; }
+
+    public Set<Occupation> getOccupations() { return occupations; }
+    public void setOccupations(Set<Occupation> occupations) { this.occupations = occupations; }
 }

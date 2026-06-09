@@ -63,16 +63,11 @@ public class JobController {
 
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
         
-        if (search != null && !search.isEmpty()) {
-            return jobRepository.searchJobsByKeyword(search.toLowerCase(), pageable);
-        }
-        if (country != null && !country.isEmpty()) {
-            return jobRepository.findByCountry(country, pageable);
-        }
-        if (category != null && !category.isEmpty()) {
-            return jobRepository.findByCategory(category, pageable);
-        }
-        return jobRepository.findAll(pageable);
+        String keywordParam = (search != null) ? search.trim().toLowerCase() : "";
+        String countryParam = (country != null) ? country.trim().toLowerCase() : "";
+        String categoryParam = (category != null) ? category.trim().toLowerCase() : "";
+
+        return jobRepository.searchAndFilterJobs(keywordParam, countryParam, categoryParam, pageable);
     }
 
     @GetMapping("/export/jobs")
@@ -162,36 +157,14 @@ public class JobController {
 
         final String COUNT_KEY = "count";
 
-        String countryQuery = "MATCH (j:Job) WHERE j.country IS NOT NULL AND j.country <> 'Unknown Country' AND j.country <> 'null' AND j.country <> 'Unknown' " +
-                "RETURN j.country AS country, count(j) AS count ORDER BY count DESC LIMIT 10";
+        String countryQuery = "MATCH (j:Job) WHERE j.country IS NOT NULL AND j.country <> 'Unknown Country' AND j.country <> 'null' AND j.country <> 'Unknown' RETURN j.country AS country, count(j) AS count ORDER BY count DESC LIMIT 10";
+        List<Map<String, Object>> jobsByCountry = neo4jClient.query(countryQuery).fetch().all().stream().map(row -> Map.of("country", row.get("country"), COUNT_KEY, row.get("count"))).collect(Collectors.toList());
 
-        List<Map<String, Object>> jobsByCountry = neo4jClient.query(countryQuery)
-                .fetch()
-                .all()
-                .stream()
-                .map(row -> Map.of("country", row.get("country"), COUNT_KEY, row.get("count")))
-                .collect(Collectors.toList());
+        String categoryQuery = "MATCH (j:Job) WHERE j.category IS NOT NULL AND j.category <> 'Uncategorized' AND j.category <> 'null' AND j.category <> 'Unknown' RETURN j.category AS category, count(j) AS count ORDER BY count DESC LIMIT 10";
+        List<Map<String, Object>> jobsByCategory = neo4jClient.query(categoryQuery).fetch().all().stream().map(row -> Map.of("category", row.get("category"), COUNT_KEY, row.get("count"))).collect(Collectors.toList());
 
-        String categoryQuery = "MATCH (j:Job) WHERE j.category IS NOT NULL AND j.category <> 'Uncategorized' AND j.category <> 'null' AND j.category <> 'Unknown' " +
-                "RETURN j.category AS category, count(j) AS count ORDER BY count DESC LIMIT 10";
-
-        List<Map<String, Object>> jobsByCategory = neo4jClient.query(categoryQuery)
-                .fetch()
-                .all()
-                .stream()
-                .map(row -> Map.of("category", row.get("category"), COUNT_KEY, row.get("count")))
-                .collect(Collectors.toList());
-
-        String languageQuery = "MATCH (j:Job) WHERE j.category = 'IT' AND j.programmingLanguages IS NOT NULL " +
-                "UNWIND j.programmingLanguages AS language " +
-                "RETURN language, count(j) AS count ORDER BY count DESC LIMIT 10";
-
-        List<Map<String, Object>> jobsByLanguage = neo4jClient.query(languageQuery)
-                .fetch()
-                .all()
-                .stream()
-                .map(row -> Map.of("language", row.get("language"), COUNT_KEY, row.get("count")))
-                .collect(Collectors.toList());
+        String skillQuery = "MATCH (s:Skill)<-[r:HAS_SKILL]-(j:Job) RETURN s.name AS skill, count(r) AS count ORDER BY count DESC LIMIT 10";
+        List<Map<String, Object>> jobsBySkill = neo4jClient.query(skillQuery).fetch().all().stream().map(row -> Map.of("skill", row.get("skill"), COUNT_KEY, row.get("count"))).collect(Collectors.toList());
 
         Map<String, Object> stats = new HashMap<>();
         stats.put("totalJobs", totalJobs);
@@ -199,7 +172,7 @@ public class JobController {
         stats.put("totalApplications", totalApplications);
         stats.put("jobsByCountry", jobsByCountry);
         stats.put("jobsByCategory", jobsByCategory);
-        stats.put("jobsByLanguage", jobsByLanguage);
+        stats.put("jobsBySkill", jobsBySkill);
 
         return ResponseEntity.ok(stats);
     }

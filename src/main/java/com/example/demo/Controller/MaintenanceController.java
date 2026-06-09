@@ -32,14 +32,16 @@ public class MaintenanceController {
         return ResponseEntity.ok("Task '" + taskName + "' started in the background.");
     }
 
-    @PostMapping("/populate-by-keywords")
-    public ResponseEntity<Map<String, Integer>> populateByKeywords(@RequestBody Map<String, String> payload) {
+    @PostMapping("/demo-populate")
+    public ResponseEntity<String> populateByKeywords(@RequestBody Map<String, String> payload) {
         String keywords = payload.get("keywords");
-        if (keywords == null || keywords.trim().isEmpty()) {
-            return ResponseEntity.badRequest().build();
+        String apiSource = payload.get("apiSource");
+
+        if (keywords == null || keywords.trim().isEmpty() || apiSource == null || apiSource.trim().isEmpty()) {
+            return ResponseEntity.badRequest().body("Keywords and API source are required.");
         }
-        Map<String, Integer> stats = dataMaintenanceService.populateByKeywords(keywords);
-        return ResponseEntity.ok(stats);
+        dataMaintenanceService.runDemoPopulation(apiSource, keywords);
+        return ResponseEntity.ok("Demo population started for source '" + apiSource + "' with keywords: '" + keywords + "'.");
     }
 
     @PostMapping("/trigger-pruning")

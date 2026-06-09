@@ -20,7 +20,7 @@ public class GeminiAgentService {
     @Value("${gemini.api.key}")
     private String GEMINI_API_KEY;
     
-    private final String GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent";
+    private final String GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent"; // Updated to latest model
 
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;
@@ -36,8 +36,8 @@ public class GeminiAgentService {
     }
 
     public String optimizeJobDescription(String title, String rawNotes, String category) {
-        String systemInstruction = "You are an expert IT HR Recruiter. Your task is to take brief notes provided by a company representative and transform them into a highly professional, attractive, and well-structured job description. Include standard sections like 'About the Role', 'Key Responsibilities', 'Requirements', and 'Benefits'. Use markdown bullet points for readability. Be concise but engaging.";
-        String userPrompt = String.format("Job Title: %s\nCategory: %s\nRaw Notes/Keywords: %s\n\nPlease generate the full job description.", title, category, rawNotes);
+        String systemInstruction = "You are an expert IT HR Recruiter. Your task is to take brief notes provided by a company representative and transform them into a highly professional, attractive, and well-structured job description. Write the entire description using clear, narrative paragraphs. Do NOT use any symbols, bullet points, asterisks (*), hashtags (#), or special characters. Use ONLY standard letters, numbers, and standard punctuation (periods, commas). Include topics like About the Role, Key Responsibilities, Requirements, and Benefits, but integrate them naturally into the paragraphs rather than using lists or distinct headings with symbols. Be concise but engaging.";
+        String userPrompt = String.format("Job Title: %s\nCategory: %s\nRaw Notes/Keywords: %s\n\nPlease generate the full job description according to the strict formatting rules.", title, category, rawNotes);
 
         return callGemini(systemInstruction, userPrompt, false);
     }
@@ -54,7 +54,7 @@ public class GeminiAgentService {
             if(requireJson) {
                 return "{\"score\": 88, \"feedback\": \"Simulated Gemini evaluation: Excellent match on primary skills, but lacks the required cloud experience.\"}";
             } else {
-                return "This is a simulated **Gemini** AI response because the API key is missing.";
+                return "This is a simulated Gemini AI response because the API key is missing. We are looking for a fantastic candidate to build scalable systems. Responsibilities include collaborating with teams. Requirements are 3 years of experience and a positive attitude.";
             }
         }
 

@@ -30,9 +30,9 @@ public class AuthTokenFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
         
-        // Skip JWT validation for auth endpoints (login/signup)
         String path = request.getRequestURI();
-        if (path.startsWith("/api/auth/")) {
+        // Skip JWT validation for auth endpoints and WebSocket handshake
+        if (path.startsWith("/api/auth/") || path.startsWith("/ws/")) {
             filterChain.doFilter(request, response);
             return;
         }

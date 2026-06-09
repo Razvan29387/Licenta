@@ -20,76 +20,71 @@ const CompanyDashboardPage = () => {
         experienceLevel: '',
         programmingLanguages: '',
     });
+    
+    const [rawNotes, setRawNotes] = useState('');
+    const [isOptimizing, setIsOptimizing] = useState(false);
 
-    // On component mount, get the current user and fetch/merge their jobs
     useEffect(() => {
         const currentUser = authService.getCurrentUser();
         if (currentUser && currentUser.username) {
             const companyName = currentUser.username;
             setJobForm(prev => ({ ...prev, companyName: companyName }));
             
-            const fetchAndMergeJobs = async () => {
+            const fetchJobs = async () => {
                 try {
-                    let dbJobs = [];
                     const compRes = await fetch(`/api/companies/find-or-create`, {
                         method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            ...authHeader()
-                        },
+                        headers: { 'Content-Type': 'application/json', ...authHeader() },
                         body: JSON.stringify({ name: companyName })
                     });
                     
                     if (compRes.ok) {
                         const company = await compRes.json();
-                        console.log("Received company object:", company); // Debugging line
-
-                        if (company && company.id) { // Defensive check
-                            const jobsRes = await fetch(`/api/companies/${company.id}/jobs`, {
-                                headers: authHeader()
-                            });
-                            if (jobsRes.ok) {
-                                dbJobs = await jobsRes.json();
-                            }
-                        } else {
-                            throw new Error("Could not retrieve a valid company ID from the server.");
+                        if (company && company.id) {
+                            const jobsRes = await fetch(`/api/companies/${company.id}/jobs`, { headers: authHeader() });
+                            if (jobsRes.ok) setJobs(await jobsRes.json());
                         }
-                    } else {
-                        throw new Error("Failed to find or create company on the server.");
                     }
-
-                    const localJobsRaw = localStorage.getItem('companyDashboardJobs');
-                    const localJobs = localJobsRaw ? JSON.parse(localJobsRaw) : [];
-
-                    const dbJobIds = new Set(dbJobs.map(j => j.id));
-                    const uniqueLocalJobs = localJobs.filter(localJob => 
-                        !dbJobIds.has(localJob.id) && localJob.companyName === companyName
-                    );
-
-                    const mergedJobs = [...dbJobs, ...uniqueLocalJobs];
-                    setJobs(mergedJobs);
-
                 } catch (err) {
-                    console.error("Failed to fetch and merge jobs:", err);
                     setError("Could not load your company's jobs. " + err.message);
                 }
             };
-            fetchAndMergeJobs();
+            fetchJobs();
         }
     }, []);
-
-    // Persist jobs to localStorage whenever they change
-    useEffect(() => {
-        try {
-            localStorage.setItem('companyDashboardJobs', JSON.stringify(jobs));
-        } catch (err) {
-            console.error("Failed to save jobs to localStorage", err);
-        }
-    }, [jobs]);
 
     const handleInputChange = (e) => {
         const { name, value } = e.target;
         setJobForm(prev => ({ ...prev, [name]: value }));
+    };
+
+    const handleGenerateDescription = async () => {
+        if (!rawNotes.trim() || !jobForm.title.trim()) {
+            alert('Please provide a Job Title and some keywords/notes first.');
+            return;
+        }
+        setIsOptimizing(true);
+        setError(null);
+        try {
+            const response = await fetch('/api/ai/optimize-description', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', ...authHeader() },
+                body: JSON.stringify({
+                    title: jobForm.title,
+                    rawNotes: rawNotes,
+                    category: jobForm.category
+                })
+            });
+            if (!response.ok) throw new Error('Failed to generate description.');
+            
+            const generatedDescription = await response.text();
+            setJobForm(prev => ({ ...prev, description: generatedDescription }));
+
+        } catch (err) {
+            setError(err.message);
+        } finally {
+            setIsOptimizing(false);
+        }
     };
 
     const handleAddOrUpdateJob = async (e) => {
@@ -138,6 +133,7 @@ const CompanyDashboardPage = () => {
                     experienceLevel: '',
                     programmingLanguages: '',
                 }));
+                setRawNotes('');
             } else {
                 const errorData = await response.text();
                 throw new Error(`Failed to save job: ${errorData}`);
@@ -161,6 +157,7 @@ const CompanyDashboardPage = () => {
             experienceLevel: job.experienceLevel || '',
             programmingLanguages: job.programmingLanguages ? job.programmingLanguages.join(', ') : '',
         });
+        setRawNotes('');
         window.scrollTo({ top: 0, behavior: 'smooth' });
     };
 
@@ -175,6 +172,7 @@ const CompanyDashboardPage = () => {
             experienceLevel: '',
             programmingLanguages: '',
         }));
+        setRawNotes('');
     };
 
     const handleViewApplicants = async (e, jobId) => {
@@ -207,62 +205,36 @@ const CompanyDashboardPage = () => {
             <main className="company-dashboard-main">
                 <section className="section-container add-job-section">
                     <h2>{editingJobId ? 'Edit Job' : 'Post a New Job'}</h2>
-                    <p>{editingJobId ? 'Update the details of your job below.' : 'Fill out the form below to post a job listing.'}</p>
                     <form onSubmit={handleAddOrUpdateJob} className="add-job-form">
-                        <input
-                            type="text"
-                            name="companyName"
-                            value={jobForm.companyName}
-                            onChange={handleInputChange}
-                            placeholder="Your Company Name"
-                            required
-                            disabled // Company name is locked to the logged-in user
-                        />
-                        <input
-                            type="text"
-                            name="title"
-                            value={jobForm.title}
-                            onChange={handleInputChange}
-                            placeholder="Job Title"
-                            required
-                        />
+                        <input type="text" name="companyName" value={jobForm.companyName} onChange={handleInputChange} placeholder="Your Company Name" required disabled />
+                        <input type="text" name="title" value={jobForm.title} onChange={handleInputChange} placeholder="Job Title" required />
+                        
+                        <div className="description-optimizer-container">
+                            <textarea
+                                name="rawNotes"
+                                value={rawNotes}
+                                onChange={(e) => setRawNotes(e.target.value)}
+                                placeholder="Enter keywords to generate a description (e.g., 'Java, Spring, 5+ years, remote')"
+                                rows="3"
+                            />
+                            <button type="button" onClick={handleGenerateDescription} disabled={isOptimizing} className="ai-button">
+                                {isOptimizing ? 'Generating...' : '✨ Generate with AI'}
+                            </button>
+                        </div>
+
                         <textarea
                             name="description"
                             value={jobForm.description}
                             onChange={handleInputChange}
-                            placeholder="Job Description"
+                            placeholder="Job Description (will be generated by AI)"
                             required
+                            rows="10"
                         />
-                        <input
-                            type="text"
-                            name="location"
-                            value={jobForm.location}
-                            onChange={handleInputChange}
-                            placeholder="Location (e.g., City, Country)"
-                            required
-                        />
-                        <input
-                            type="text"
-                            name="category"
-                            value={jobForm.category}
-                            onChange={handleInputChange}
-                            placeholder="Job Category"
-                            required
-                        />
-                        <input
-                            type="text"
-                            name="experienceLevel"
-                            value={jobForm.experienceLevel}
-                            onChange={handleInputChange}
-                            placeholder="Experience Level (e.g., 2 years)"
-                        />
-                        <input
-                            type="text"
-                            name="programmingLanguages"
-                            value={jobForm.programmingLanguages}
-                            onChange={handleInputChange}
-                            placeholder="Languages (comma separated)"
-                        />
+                        <input type="text" name="location" value={jobForm.location} onChange={handleInputChange} placeholder="Location (e.g., City, Country)" required />
+                        <input type="text" name="category" value={jobForm.category} onChange={handleInputChange} placeholder="Job Category" required />
+                        <input type="text" name="experienceLevel" value={jobForm.experienceLevel} onChange={handleInputChange} placeholder="Experience Level (e.g., 2 years)" />
+                        <input type="text" name="programmingLanguages" value={jobForm.programmingLanguages} onChange={handleInputChange} placeholder="Languages (comma separated)" />
+                        
                         <div className="form-actions">
                             <button type="submit">{editingJobId ? 'Save Changes' : 'Post Job'}</button>
                             {editingJobId && (

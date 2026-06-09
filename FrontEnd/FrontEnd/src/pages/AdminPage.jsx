@@ -1,44 +1,78 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import authHeader from '../services/auth-header';
 import '../styles/AdminPage.css';
+import SockJS from 'sockjs-client';
+import Stomp from 'stompjs';
 
 const AdminPage = () => {
-    // State pentru task-urile de import
     const [tasks, setTasks] = useState([]);
     const [taskMessages, setTaskMessages] = useState({});
     const [runningTasks, setRunningTasks] = useState([]);
-
-    // State pentru task-ul de pruning
     const [pruningMessage, setPruningMessage] = useState('');
     const [isPruning, setIsPruning] = useState(false);
-
-    // State pentru arhivele de pruning
     const [pruningArchives, setPruningArchives] = useState([]);
     const [archiveMessage, setArchiveMessage] = useState('');
     const [isRestoringArchive, setIsRestoringArchive] = useState(null);
-
-    // State pentru backup & restore
     const [backups, setBackups] = useState([]);
     const [backupMessage, setBackupMessage] = useState('');
     const [isRestoring, setIsRestoring] = useState(null);
 
-    // New state for the demo keyword population
+    // Demo & WebSocket state
     const [keywords, setKeywords] = useState('data analytics');
+    const [selectedApi, setSelectedApi] = useState('jsearch-it');
     const [isPopulating, setIsPopulating] = useState(false);
-    const [populateStats, setPopulateStats] = useState(null);
-    const [populateError, setPopulateError] = useState('');
+    const [progressEvents, setProgressEvents] = useState([]);
+    const [showSummary, setShowSummary] = useState(false);
+    const stompClientRef = useRef(null);
+    const progressPanelRef = useRef(null);
 
     useEffect(() => {
         fetchTasks();
         fetchBackups();
         fetchPruningArchives();
+
+        const socket = new SockJS('/ws');
+        const client = Stomp.over(socket);
+        client.debug = null;
+        
+        client.connect({}, () => {
+            client.subscribe('/topic/demo-progress', (message) => {
+                const event = JSON.parse(message.body);
+                if (event.status === 'FINISHED') {
+                    setIsPopulating(false);
+                    setShowSummary(true);
+                } else {
+                    setProgressEvents(prev => [...prev, event]);
+                }
+            });
+        }, (error) => {
+            console.error("WebSocket connection error:", error);
+        });
+
+        stompClientRef.current = client;
+
+        return () => {
+            if (stompClientRef.current && stompClientRef.current.connected) {
+                stompClientRef.current.disconnect();
+            }
+        };
     }, []);
+
+    useEffect(() => {
+        if (progressPanelRef.current) {
+            progressPanelRef.current.scrollTop = progressPanelRef.current.scrollHeight;
+        }
+    }, [progressEvents]);
 
     const fetchTasks = async () => {
         try {
             const response = await fetch('/api/maintenance/tasks', { headers: authHeader() });
             if (!response.ok) throw new Error('Failed to fetch tasks');
-            setTasks(await response.json());
+            const availableTasks = await response.json();
+            setTasks(availableTasks);
+            if (availableTasks.length > 0) {
+                setSelectedApi(availableTasks[0]);
+            }
         } catch (error) {
             console.error("Error fetching tasks:", error);
         }
@@ -80,36 +114,6 @@ const AdminPage = () => {
             setTaskMessages(prev => ({ ...prev, [taskName]: `Error: ${error.message}` }));
         } finally {
             setTimeout(() => setRunningTasks(prev => prev.filter(t => t !== taskName)), 3000);
-        }
-    };
-
-    const handlePopulateByKeywords = async () => {
-        if (isPopulating || !keywords.trim()) return;
-        setIsPopulating(true);
-        setPopulateStats(null);
-        setPopulateError('');
-        
-        try {
-            const response = await fetch('/api/maintenance/populate-by-keywords', {
-                method: 'POST',
-                headers: { 
-                    'Content-Type': 'application/json',
-                    ...authHeader()
-                },
-                body: JSON.stringify({ keywords: keywords.trim() }),
-            });
-            
-            if (!response.ok) {
-                throw new Error('Failed to start population task');
-            }
-            
-            const stats = await response.json();
-            setPopulateStats(stats);
-            
-        } catch (error) {
-            setPopulateError(`Error: ${error.message}`);
-        } finally {
-            setIsPopulating(false);
         }
     };
 
@@ -158,7 +162,7 @@ const AdminPage = () => {
     };
 
     const handleLoadBackup = async (filename) => {
-        const isConfirmed = window.confirm(`CONFIRM LOAD BACKUP\n\nThis will DELETE ALL EXISTING DATA...`);
+        const isConfirmed = window.confirm(`CONFIRM LOAD BACKUP\n\nThis will DELETE ALL EXISTING DATA in the database and replace it completely with the contents of '${filename}'. \n\nAre you absolutely sure you want to proceed? This cannot be undone.`);
         if (!isConfirmed) return;
         setIsRestoring(filename);
         setBackupMessage(`Clearing database and loading script ${filename}...`);
@@ -178,6 +182,35 @@ const AdminPage = () => {
             setBackupMessage(`Error: ${error.message}`);
         } finally {
             setTimeout(() => setIsRestoring(null), 3000);
+        }
+    };
+
+    const handlePopulateByKeywords = async () => {
+        if (isPopulating || !keywords.trim()) return;
+        setIsPopulating(true);
+        setProgressEvents([]);
+        setShowSummary(false);
+        
+        try {
+            const response = await fetch('/api/maintenance/demo-populate', {
+                method: 'POST',
+                headers: { 
+                    'Content-Type': 'application/json',
+                    ...authHeader()
+                },
+                body: JSON.stringify({ 
+                    apiSource: selectedApi,
+                    keywords: keywords.trim() 
+                }),
+            });
+            
+            if (!response.ok) {
+                setIsPopulating(false);
+                throw new Error('Failed to start population task');
+            }
+        } catch (error) {
+            setIsPopulating(false);
+            setProgressEvents([{ status: 'ERROR', jobTitle: 'System', details: error.message }]);
         }
     };
 
@@ -218,6 +251,43 @@ const AdminPage = () => {
         return 'A general data import task.';
     };
 
+    const getStatusColor = (status) => {
+        switch(status) {
+            case 'PROCESSING': return '#17a2b8';
+            case 'SAVED': return '#28a745';
+            case 'SKIPPED': return '#ffc107';
+            case 'ERROR': return '#dc3545';
+            case 'FINISHED': return '#6f42c1';
+            default: return '#6c757d';
+        }
+    };
+
+    const renderSummary = () => {
+        const savedJobs = progressEvents.filter(e => e.status === 'SAVED');
+        const skippedJobs = progressEvents.filter(e => e.status === 'SKIPPED');
+        const errorJobs = progressEvents.filter(e => e.status === 'ERROR');
+
+        return (
+            <div className="summary-section">
+                <h3>Import Summary</h3>
+                <div className="summary-grid">
+                    <div className="summary-box saved">
+                        <h4>{savedJobs.length} Saved</h4>
+                        <ul>{savedJobs.map((e, i) => <li key={i}><strong>{e.jobTitle}</strong> - {e.details}</li>)}</ul>
+                    </div>
+                    <div className="summary-box skipped">
+                        <h4>{skippedJobs.length} Skipped</h4>
+                        <ul>{skippedJobs.map((e, i) => <li key={i}><strong>{e.jobTitle}</strong> - {e.details}</li>)}</ul>
+                    </div>
+                    <div className="summary-box error">
+                        <h4>{errorJobs.length} Errors</h4>
+                        <ul>{errorJobs.map((e, i) => <li key={i}><strong>{e.jobTitle}</strong> - {e.details}</li>)}</ul>
+                    </div>
+                </div>
+            </div>
+        );
+    };
+
     return (
         <div className="admin-container">
             <h1 className="admin-title">Task Administration</h1>
@@ -227,16 +297,22 @@ const AdminPage = () => {
                 <h2 className="section-title">Demo Presentation Tool</h2>
                 <div className="task-card" style={{ border: '2px solid #007bff' }}>
                     <div className="task-info">
-                        <h3>Populate Database by Keywords</h3>
-                        <p>Enter keywords to fetch jobs from multiple sources and populate the database. Ideal for live demos.</p>
-                        <input 
-                            type="text" 
-                            className="keyword-input"
-                            style={{ padding: '10px', width: '100%', marginTop: '10px', borderRadius: '4px', border: '1px solid #ccc' }}
-                            value={keywords}
-                            onChange={(e) => setKeywords(e.target.value)}
-                            placeholder='e.g., data analytics, "cyber security + IoT"'
-                        />
+                        <h3>Real-time Database Population</h3>
+                        <p>Select an API source, enter keywords, and watch the live extraction of skills.</p>
+                        
+                        <div className="demo-controls">
+                            <select value={selectedApi} onChange={(e) => setSelectedApi(e.target.value)} className="api-select">
+                                {tasks.map(task => <option key={task} value={task}>{task}</option>)}
+                            </select>
+                            <input 
+                                type="text" 
+                                className="keyword-input"
+                                style={{ padding: '10px', width: '100%', marginTop: '10px', borderRadius: '4px', border: '1px solid #ccc' }}
+                                value={keywords}
+                                onChange={(e) => setKeywords(e.target.value)}
+                                placeholder='e.g., data analytics, "cyber security"'
+                            />
+                        </div>
                     </div>
                     <div className="task-actions" style={{ marginTop: '15px' }}>
                         <button 
@@ -245,43 +321,40 @@ const AdminPage = () => {
                             className="task-button demo-button" 
                             style={{ backgroundColor: '#28a745', fontSize: '1.1em', width: '100%' }}
                         >
-                            {isPopulating ? (
-                                <span>⏳ Fetching jobs (this takes ~5 seconds)...</span>
-                            ) : (
-                                '🚀 Populate for Demo'
-                            )}
+                            {isPopulating ? 'Process Running...' : '🚀 Start Live Demo'}
                         </button>
-                        
-                        {populateError && <p className="error-message" style={{ color: '#dc3545', marginTop: '10px' }}>{populateError}</p>}
-                        
-                        {populateStats && (
-                            <div className="demo-results-container">
-                                <h4 className="results-title">Import Results</h4>
-                                <div className="stats-grid">
-                                    <div>
-                                        <div className="stat-number" style={{ color: '#17a2b8' }}>{populateStats.totalFound}</div>
-                                        <div className="stat-label">Jobs Found</div>
-                                    </div>
-                                    <div>
-                                        <div className="stat-number" style={{ color: '#28a745' }}>{populateStats.saved}</div>
-                                        <div className="stat-label">Successfully Saved</div>
-                                    </div>
-                                    <div>
-                                        <div className="stat-number" style={{ color: populateStats.errors > 0 ? '#dc3545' : '#6c757d' }}>{populateStats.errors}</div>
-                                        <div className="stat-label">Errors / Skipped</div>
-                                    </div>
-                                </div>
-                                <div className="memgraph-link-container">
-                                    <p>To see the new nodes, run this query in Memgraph Lab:</p>
-                                    <pre className="cypher-query">MATCH (j:Job)-[r]-(c:Company) WHERE toLower(j.title) CONTAINS '{keywords.toLowerCase().split(' ')[0]}' RETURN j,r,c LIMIT 25</pre>
-                                    <button onClick={() => window.open('http://localhost:3000', '_blank')} className="memgraph-button">
-                                        Open Memgraph Lab
-                                    </button>
-                                </div>
-                            </div>
-                        )}
                     </div>
                 </div>
+
+                {(isPopulating || progressEvents.length > 0) && (
+                    <div ref={progressPanelRef} className="progress-panel" style={{ marginTop: '20px', padding: '15px', backgroundColor: '#212529', borderRadius: '8px', color: '#f8f9fa', height: '400px', overflowY: 'auto', border: '1px solid #495057' }}>
+                        <h4 className="progress-title" style={{ margin: '0 0 15px 0', borderBottom: '1px solid #495057', paddingBottom: '10px', position: 'sticky', top: 0, backgroundColor: '#212529', zIndex: 1 }}>
+                            {showSummary ? 'Final Summary' : 'Live Ingestion Log'}
+                        </h4>
+                        {showSummary ? renderSummary() : (
+                            <div className="log-container" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                {progressEvents.map((event, index) => (
+                                    <div key={index} className="log-entry" style={{ padding: '10px', borderRadius: '4px', backgroundColor: '#343a40', borderLeft: `4px solid ${getStatusColor(event.status)}` }}>
+                                        <div className="log-header" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
+                                            <strong style={{ color: getStatusColor(event.status) }}>[{event.status}]</strong>
+                                            <span className="log-title" style={{ fontSize: '0.9em', color: '#adb5bd' }}>{event.jobTitle}</span>
+                                        </div>
+                                        <div className="log-details" style={{ fontSize: '0.95em', color: event.status === 'ERROR' ? '#ff6b6b' : '#f8f9fa' }}>{event.details}</div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                        <div style={{ marginTop: '25px', textAlign: 'center', paddingTop: '20px', borderTop: '1px dashed #ced4da' }}>
+                            <p style={{ color: '#adb5bd', fontSize: '0.95em', marginBottom: '10px' }}>To see the new nodes, run this query in Memgraph Lab:</p>
+                            <pre style={{ backgroundColor: '#e9ecef', padding: '10px', borderRadius: '4px', fontFamily: 'monospace', color: '#495057', display: 'block', whiteSpace: 'pre-wrap', wordWrap: 'break-word', textAlign: 'left' }}>
+                                MATCH (j:Job)-[r]-(c:Company) WHERE toLower(j.title) CONTAINS '{keywords.toLowerCase().split(' ')[0]}' RETURN j,r,c LIMIT 25
+                            </pre>
+                            <button onClick={() => window.open('http://localhost:3000', '_blank')} style={{ marginTop: '15px', padding: '10px 25px', border: 'none', borderRadius: '5px', backgroundColor: '#fd7e14', color: 'white', fontWeight: 'bold', cursor: 'pointer' }}>
+                                Open Memgraph Lab
+                            </button>
+                        </div>
+                    </div>
+                )}
             </div>
 
             <div className="section-container">
