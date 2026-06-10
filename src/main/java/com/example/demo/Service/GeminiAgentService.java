@@ -20,7 +20,7 @@ public class GeminiAgentService {
     @Value("${gemini.api.key}")
     private String GEMINI_API_KEY;
     
-    private final String GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent"; // Updated to latest model
+    private final String GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent"; // Updated to latest model
 
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;

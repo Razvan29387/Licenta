@@ -10,7 +10,7 @@ const register = (username, email, password, role) => {
       username,
       email,
       password,
-      role: [role] // Send role as an array
+      role: [role]
     }),
   });
 };
@@ -43,9 +43,41 @@ const logout = () => {
   localStorage.removeItem("user");
 };
 
+const parseJwt = (token) => {
+  try {
+    const base64Url = token.split('.')[1];
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    const jsonPayload = decodeURIComponent(window.atob(base64).split('').map(function(c) {
+        return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+    }).join(''));
+
+    return JSON.parse(jsonPayload);
+  } catch (e) {
+    return null;
+  }
+};
+
 const getCurrentUser = () => {
   const userStr = localStorage.getItem("user");
-  if(userStr) return JSON.parse(userStr);
+  if (userStr) {
+    try {
+      const user = JSON.parse(userStr);
+      if (user && user.accessToken) {
+        const decodedJwt = parseJwt(user.accessToken);
+        
+        if (decodedJwt && decodedJwt.exp * 1000 < Date.now()) {
+          console.warn("Session expired. Logging out silently.");
+          logout();
+          return null; // Token is expired, treat user as logged out
+        }
+        return user;
+      }
+    } catch (e) {
+      console.error("Error parsing user data from local storage", e);
+      logout();
+      return null;
+    }
+  }
   return null;
 };
 

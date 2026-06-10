@@ -31,8 +31,8 @@ public class AuthTokenFilter extends OncePerRequestFilter {
             throws ServletException, IOException {
         
         String path = request.getRequestURI();
-        // Skip JWT validation for auth endpoints and WebSocket handshake
-        if (path.startsWith("/api/auth/") || path.startsWith("/ws/")) {
+        // Skip JWT validation for auth, WebSocket, and public maintenance endpoints
+        if (path.startsWith("/api/auth/") || path.startsWith("/ws/") || path.startsWith("/api/maintenance/")) {
             filterChain.doFilter(request, response);
             return;
         }

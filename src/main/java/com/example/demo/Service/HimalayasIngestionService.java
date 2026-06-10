@@ -20,6 +20,7 @@ import java.util.Optional;
 public class HimalayasIngestionService {
 
     private static final Logger log = LoggerFactory.getLogger(HimalayasIngestionService.class);
+    private static final int MAX_OFFSET = 5000; // Limit import to prevent infinite loops
 
     private final JobRepository jobRepository;
     private final RestTemplate restTemplate;
@@ -44,7 +45,7 @@ public class HimalayasIngestionService {
         int offset = initialOffset;
         boolean hasMore = true;
 
-        while (hasMore) {
+        while (hasMore && offset <= MAX_OFFSET) {
             try {
                 String url = String.format("%s?limit=%d&offset=%d", BASE_URL, limit, offset);
                 
@@ -75,7 +76,12 @@ public class HimalayasIngestionService {
                 hasMore = false; 
             }
         }
-        log.info("Himalayas - Import finished.");
+        
+        if (offset > MAX_OFFSET) {
+            log.info("Himalayas - Import reached MAX_OFFSET of {}. Stopping.", MAX_OFFSET);
+        } else {
+            log.info("Himalayas - Import finished.");
+        }
     }
 
     private boolean saveOrUpdateJob(JsonNode jobNode) {
