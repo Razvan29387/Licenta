@@ -28,7 +28,7 @@ public class RemotiveIngestionService {
     private final WebSocketProgressService progressService;
 
     // Folosim categoria "software-dev" pentru a aduce doar joburi IT
-    private final String BASE_URL = "https://remotive.com/api/remote-jobs?search=";
+    private final String BASE_URL = "https://remotive.com/api/remote-jobs?category=software-dev&search=";
 
     public RemotiveIngestionService(JobRepository jobRepository, EntityResolutionService entityResolutionService, NerExtractionService nerExtractionService, WebSocketProgressService progressService) {
         this.jobRepository = jobRepository;

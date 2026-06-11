@@ -20,6 +20,7 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
 @Service
@@ -50,6 +51,8 @@ public class JsearchIngestionService {
 
     @Async("taskExecutor")
     public void importJobs(String query, int numPages) {
+        // This method is for regular, non-demo imports. It doesn't need progress reporting.
+        // We can create a simpler version of import logic here if needed, or just call the progress one.
         importJobsAndReportProgress(query, numPages);
     }
 
@@ -83,7 +86,7 @@ public class JsearchIngestionService {
                             progressService.sendProgress("PROCESSING", jobTitle, "Checking job details...");
                             
                             try {
-                                Thread.sleep(500); // Small delay for visual effect
+                                Thread.sleep(200); // Small delay for visual effect
                                 saveOrUpdateJob(jobNode);
                             } catch (Exception e) {
                                 log.error("Error saving individual job: " + e.getMessage());
@@ -149,11 +152,12 @@ public class JsearchIngestionService {
         if (job.getCreatedAt() == null) job.setCreatedAt(LocalDateTime.now());
 
         Job savedJob = jobRepository.save(job);
-        nerExtractionService.processJob(savedJob);
         
-        // Wait for skills to be processed to send them back
-        Job finalJob = jobRepository.findById(savedJob.getId()).orElse(savedJob);
-        String skills = finalJob.getSkills().stream().map(s -> s.getName()).collect(Collectors.joining(", "));
-        progressService.sendProgress("SAVED", jobTitle, "Skills: " + (skills.isEmpty() ? "None found" : skills));
+        // Process NER asynchronously and send WebSocket message upon completion
+        CompletableFuture<Job> futureJob = nerExtractionService.processJob(savedJob);
+        futureJob.thenAccept(finalJob -> {
+            String skills = finalJob.getSkills().stream().map(s -> s.getName()).collect(Collectors.joining(", "));
+            progressService.sendProgress("SAVED", finalJob.getTitle(), "Skills: " + (skills.isEmpty() ? "None found" : skills));
+        });
     }
 }

@@ -374,7 +374,7 @@ const AdminPage = () => {
             <div className="section-container">
                 <h2 className="section-title">Maintenance Tasks</h2>
                 <div className="task-card">
-                    <div className="task-info"><h3>Weekly Database Pruning</h3><p>Archives and deletes jobs older than 21 days. Runs automatically every Sunday.</p></div>
+                    <div className="task-info"><h3>Weekly Database Pruning</h3><p>Archives and deletes jobs older than 14 days. Runs automatically every Sunday.</p></div>
                     <div className="task-actions">
                         <button onClick={handleTriggerPruning} disabled={isPruning} className="task-button">{isPruning ? 'Pruning...' : 'Trigger Pruning'}</button>
                         {pruningMessage && <p className={`feedback-message ${pruningMessage.includes('Error') ? 'error' : 'success'}`}>{pruningMessage}</p>}

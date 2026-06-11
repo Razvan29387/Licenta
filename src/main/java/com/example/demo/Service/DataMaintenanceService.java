@@ -6,6 +6,7 @@ import com.fasterxml.jackson.core.JsonGenerator;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import com.opencsv.CSVWriter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -16,11 +17,12 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.StringWriter;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import java.util.Map;
 import java.util.stream.Collectors;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
@@ -31,6 +33,7 @@ public class DataMaintenanceService {
 
     private static final Logger log = LoggerFactory.getLogger(DataMaintenanceService.class);
     private static final int BATCH_SIZE = 500;
+    private static final int PRUNING_BATCH_SIZE = 10; // Redus foarte mult pentru a preveni erorile de buffer Netty pe date mari
 
     private static final int ADZUNA_DAILY_REQUEST_BUDGET = 240;
     private static final int ARBEITNOW_PAGES_TO_FETCH = 30;
@@ -111,16 +114,14 @@ public class DataMaintenanceService {
         
         if (apiSource.toLowerCase().startsWith("adzuna-")) {
             String countryCode = apiSource.substring(7);
-            adzunaIngestionService.importJobsAndReportProgress(countryCode, keywords, 1); // 1 page for demo
+            adzunaIngestionService.importJobsAndReportProgress(countryCode, keywords, 1);
         } else if ("jsearch-it".equalsIgnoreCase(apiSource)) {
-            jsearchIngestionService.importJobsAndReportProgress(keywords, 2); // 2 pages for demo
+            jsearchIngestionService.importJobsAndReportProgress(keywords, 2);
         } else if ("remotive-software".equalsIgnoreCase(apiSource)) {
             remotiveIngestionService.importJobsAndReportProgress(keywords);
-        }
-        else {
+        } else {
             log.warn("Unsupported API source for demo: {}", apiSource);
         }
-
     }
 
     @Scheduled(cron = "0 0 15 * * ?")
@@ -134,50 +135,107 @@ public class DataMaintenanceService {
         log.info("--- ALL IMPORT TASKS HAVE BEEN LAUNCHED ---");
     }
 
-    @Scheduled(cron = "0 0 5 * * SUN")
-    @Transactional("transactionManager")
+    @Scheduled(cron = "0 0 15 * * SUN")
     public void triggerWeeklyPruning() {
-        log.info("--- STARTING WEEKLY DATABASE PRUNING ---");
+        log.info("--- STARTING BATCHED WEEKLY DATABASE PRUNING (ID-BASED) ---");
 
-        LocalDateTime timeThreshold = LocalDateTime.now().minusDays(14);
-        log.info("Pruning jobs older than 14 days (threshold: {}).", timeThreshold);
+        LocalDateTime timeThreshold = LocalDateTime.now().minusDays(36); // Changed to 36 days to ensure more jobs
+        log.info("Finding IDs for jobs older than 36 days (threshold: {}).", timeThreshold);
 
-        List<Job> oldJobs = jobRepository.findByCreatedAtBefore(timeThreshold);
+        List<Long> oldJobIds = jobRepository.findIdsByCreatedAtBefore(timeThreshold);
 
-        if (oldJobs.isEmpty()) {
-            log.info("No jobs older than 14 days found to prune.");
+        if (oldJobIds == null || oldJobIds.isEmpty()) {
+            log.info("No old jobs found to prune.");
             return;
         }
 
-        log.info("Found {} jobs older than 14 days to be pruned.", oldJobs.size());
-        try {
-            archiveJobs(oldJobs);
-            log.info("Deleting {} old jobs from the database...", oldJobs.size());
-            jobRepository.deleteAll(oldJobs);
-            log.info("Successfully deleted old jobs.");
-        } catch (IOException e) {
-            log.error("CRITICAL: Failed to archive or delete old jobs.", e);
-        }
-        log.info("--- WEEKLY DATABASE PRUNING FINISHED ---");
-    }
+        log.info("Found {} job IDs to be pruned. Starting batch processing...", oldJobIds.size());
 
-    private void archiveJobs(List<Job> jobs) throws IOException {
         File archiveDir = new File("archives");
         if (!archiveDir.exists()) archiveDir.mkdirs();
         String archiveFileName = "pruned_jobs_" + System.currentTimeMillis() + ".zip";
         File archiveFile = new File(archiveDir, archiveFileName);
-        log.info("Archiving jobs to: {}", archiveFile.getAbsolutePath());
+
+        int totalArchived = 0;
+        int totalDeleted = 0;
+
         try (FileOutputStream fos = new FileOutputStream(archiveFile);
              ZipOutputStream zos = new ZipOutputStream(fos)) {
-            
-            ZipEntry jsonEntry = new ZipEntry("jobs.json");
-            zos.putNextEntry(jsonEntry);
-            
-            objectMapper.writerWithDefaultPrettyPrinter().writeValue(zos, jobs);
-            
-            zos.closeEntry();
+
+            for (int i = 0; i < oldJobIds.size(); i += PRUNING_BATCH_SIZE) {
+                int end = Math.min(i + PRUNING_BATCH_SIZE, oldJobIds.size());
+                List<Long> batchIds = oldJobIds.subList(i, end);
+                
+                log.info("Processing pruning batch {} to {} out of {}", i, end, oldJobIds.size());
+                
+                try {
+                    List<Job> jobsBatch = (List<Job>) jobRepository.findAllById(batchIds);
+                    
+                    if (!jobsBatch.isEmpty()) {
+                        archiveJobsBatch(jobsBatch, zos);
+                        totalArchived += jobsBatch.size();
+
+                        jobRepository.deleteAll(jobsBatch);
+                        totalDeleted += jobsBatch.size();
+                    }
+                    // Scurtă pauză pentru a nu copleși conexiunea de rețea cu driverul Neo4j
+                    Thread.sleep(100); 
+                } catch (Exception e) {
+                    log.error("Error processing batch {} to {}. Skipping this batch. Error: {}", i, end, e.getMessage());
+                    // Dacă un lot eșuează (ex: memorie), continuăm cu restul pentru a nu bloca întreg procesul
+                }
+            }
+
+            log.info("Successfully archived {} and deleted {} old jobs.", totalArchived, totalDeleted);
+
+        } catch (Exception e) {
+            log.error("CRITICAL: Failed during batch pruning and archiving process.", e);
         }
-        log.info("Archiving completed successfully.");
+        log.info("--- BATCHED WEEKLY DATABASE PRUNING FINISHED ---");
+    }
+
+    private void archiveJobsBatch(List<Job> jobs, ZipOutputStream zos) throws IOException {
+        long timestamp = System.currentTimeMillis();
+        
+        // 1. Archive as JSON
+        ZipEntry jsonEntry = new ZipEntry("batch_" + timestamp + ".json");
+        zos.putNextEntry(jsonEntry);
+        objectMapper.writerWithDefaultPrettyPrinter().writeValue(zos, jobs);
+        zos.closeEntry();
+
+        // 2. Archive as CSV
+        ZipEntry csvEntry = new ZipEntry("batch_" + timestamp + ".csv");
+        zos.putNextEntry(csvEntry);
+        
+        try (StringWriter stringWriter = new StringWriter();
+             CSVWriter csvWriter = new CSVWriter(stringWriter)) {
+
+            String[] header = {"id", "adzunaId", "title", "location", "country", "description", "url", "category", "createdAt", "experienceLevel", "companyName", "skills"};
+            csvWriter.writeNext(header);
+
+            for (Job job : jobs) {
+                String[] data = {
+                    job.getId() != null ? job.getId().toString() : "",
+                    job.getAdzunaId(),
+                    job.getTitle(),
+                    job.getLocation(),
+                    job.getCountry(),
+                    job.getDescription(),
+                    job.getUrl(),
+                    job.getCategory(),
+                    job.getCreatedAt() != null ? job.getCreatedAt().toString() : "",
+                    job.getExperienceLevel(),
+                    job.getCompanyName(),
+                    job.getSkills() != null ? job.getSkills().stream().map(s -> s.getName()).collect(Collectors.joining(";")) : ""
+                };
+                csvWriter.writeNext(data);
+            }
+            csvWriter.close(); // Closes the StringWriter safely
+
+            // Write the constructed CSV string to the ZipOutputStream
+            zos.write(stringWriter.toString().getBytes(StandardCharsets.UTF_8));
+        }
+        zos.closeEntry();
     }
 
     public void restoreFromArchive(String archiveFileName) throws IOException {
@@ -194,42 +252,43 @@ public class DataMaintenanceService {
         try (FileInputStream fis = new FileInputStream(archiveFile);
              ZipInputStream zis = new ZipInputStream(fis)) {
 
-            ZipEntry jsonEntry = zis.getNextEntry();
-            if (jsonEntry != null && jsonEntry.getName().equals("jobs.json")) {
-                List<Job> restoredJobs = objectMapper.readValue(zis, new TypeReference<List<Job>>() {});
+            ZipEntry entry;
+            while ((entry = zis.getNextEntry()) != null) {
+                if (entry.getName().endsWith(".json") && entry.getName().startsWith("batch_")) {
+                    log.info("Restoring from JSON batch: {}", entry.getName());
+                    List<Job> restoredJobs = objectMapper.readValue(zis, new TypeReference<List<Job>>() {});
 
-                if (restoredJobs != null && !restoredJobs.isEmpty()) {
-                    log.info("Found {} jobs in the archive. Checking for duplicates before saving...", restoredJobs.size());
-                    
-                    List<Job> jobsToSave = new ArrayList<>();
-                    for (Job job : restoredJobs) {
-                        if (job.getAdzunaId() != null && !jobRepository.existsByAdzunaId(job.getAdzunaId())) {
-                            jobsToSave.add(job);
-                        }
-                    }
-
-                    if (!jobsToSave.isEmpty()) {
-                        log.info("Attempting to save {} new jobs in batches of {}.", jobsToSave.size(), BATCH_SIZE);
+                    if (restoredJobs != null && !restoredJobs.isEmpty()) {
+                        log.info("Found {} jobs in JSON batch. Checking for duplicates before saving...", restoredJobs.size());
                         
-                        for (int i = 0; i < jobsToSave.size(); i += BATCH_SIZE) {
-                            int end = Math.min(i + BATCH_SIZE, jobsToSave.size());
-                            List<Job> batch = jobsToSave.subList(i, end);
-                            log.info("Processing batch {}/{} (jobs {} to {})", (i / BATCH_SIZE) + 1, (jobsToSave.size() / BATCH_SIZE) + 1, i, end - 1);
-                            batchJobSaverService.saveJobsInBatch(batch);
+                        List<Job> jobsToSave = new ArrayList<>();
+                        for (Job job : restoredJobs) {
+                            if (job.getAdzunaId() != null && !jobRepository.existsByAdzunaId(job.getAdzunaId())) {
+                                jobsToSave.add(job);
+                            }
                         }
 
-                        log.info("Successfully restored {} jobs from the archive (skipped {} duplicates).", 
-                                 jobsToSave.size(), restoredJobs.size() - jobsToSave.size());
-                    } else {
-                        log.info("All {} jobs from the archive already exist in the database. Nothing to restore.", restoredJobs.size());
-                    }
+                        if (!jobsToSave.isEmpty()) {
+                            log.info("Attempting to save {} new jobs in batches of {}.", jobsToSave.size(), BATCH_SIZE);
+                            
+                            for (int i = 0; i < jobsToSave.size(); i += BATCH_SIZE) {
+                                int end = Math.min(i + BATCH_SIZE, jobsToSave.size());
+                                List<Job> batch = jobsToSave.subList(i, end);
+                                log.info("Processing batch {}/{} (jobs {} to {})", (i / BATCH_SIZE) + 1, (jobsToSave.size() / BATCH_SIZE) + 1, i, end - 1);
+                                batchJobSaverService.saveJobsInBatch(batch);
+                            }
 
-                } else {
-                    log.warn("No jobs found inside the archive's jobs.json.");
+                            log.info("Successfully restored {} jobs from the archive (skipped {} duplicates).", 
+                                     jobsToSave.size(), restoredJobs.size() - jobsToSave.size());
+                        } else {
+                            log.info("All {} jobs from the JSON batch already exist in the database. Nothing to restore.", restoredJobs.size());
+                        }
+
+                    } else {
+                        log.warn("No jobs found inside the JSON batch: {}", entry.getName());
+                    }
                 }
-            } else {
-                log.error("Could not find 'jobs.json' inside the archive.");
-                throw new IOException("Invalid archive format: 'jobs.json' not found.");
+                zis.closeEntry();
             }
         } catch (IOException e) {
             log.error("Failed to read or process the archive file: {}", archiveFile.getAbsolutePath(), e);
