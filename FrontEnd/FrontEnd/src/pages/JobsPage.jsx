@@ -9,6 +9,8 @@ const JobsPage = () => {
   const searchFromState = location.state?.search || '';
   const countryFromState = location.state?.country || '';
   const categoryFromState = location.state?.category || '';
+  const occupationFromState = location.state?.occupation || '';
+  const skillFromState = location.state?.skill || '';
 
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -33,9 +35,16 @@ const JobsPage = () => {
       if (categoryFromState) {
         url.searchParams.append('category', categoryFromState);
       }
+      if (occupationFromState) {
+        url.searchParams.append('occupation', occupationFromState);
+      }
+      if (skillFromState) {
+        url.searchParams.append('skill', skillFromState);
+      }
 
       try {
-        const response = await fetch(url, { headers: authHeader() });
+        // No auth header needed for public endpoints
+        const response = await fetch(url);
         if (!response.ok) throw new Error(`Server responded with ${response.status}`);
         const data = await response.json();
         
@@ -51,16 +60,20 @@ const JobsPage = () => {
       }
     };
     loadJobs();
-  }, [currentPage, searchFromState, countryFromState, categoryFromState, jobsPerPage]);
+  }, [currentPage, searchFromState, countryFromState, categoryFromState, occupationFromState, skillFromState, jobsPerPage]);
 
   const handlePageChange = (pageNumber) => {
     setCurrentPage(pageNumber);
   };
 
   const getHeader = () => {
-    if (searchFromState) return `Search results for "${searchFromState}"`;
+    // Extract skill from combined search (if search contains space, last word could be skill)
+    // But for clarity, we'll keep it simple - just show the search
+    if (searchFromState) return `Advanced Search: "${searchFromState}"`;
     if (countryFromState) return `Jobs in ${countryFromState}`;
     if (categoryFromState) return `Jobs in ${categoryFromState}`;
+    if (occupationFromState) return `Jobs in ${occupationFromState}`;
+    if (skillFromState) return `Jobs requiring ${skillFromState}`;
     return 'Find Your Dream Job';
   };
 

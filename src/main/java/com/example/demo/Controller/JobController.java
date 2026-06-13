@@ -58,20 +58,38 @@ public class JobController {
             @RequestParam(required = false) String search,
             @RequestParam(required = false) String country,
             @RequestParam(required = false) String category,
+            @RequestParam(required = false) String occupation,
+            @RequestParam(required = false) String skill,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
 
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
         
+        // If both search and skill are provided, search with both filters
+        if (search != null && !search.isEmpty() && skill != null && !skill.isEmpty()) {
+            return jobRepository.searchJobsByKeywordAndSkill(search, skill, pageable);
+        }
+        // If only search is provided
         if (search != null && !search.isEmpty()) {
             return jobRepository.searchJobsByKeyword(search, pageable);
         }
+        // If only country is provided
         if (country != null && !country.isEmpty()) {
             return jobRepository.findByCountry(country, pageable);
         }
+        // If only category is provided
         if (category != null && !category.isEmpty()) {
             return jobRepository.findByCategory(category, pageable);
         }
+        // If only occupation is provided
+        if (occupation != null && !occupation.isEmpty()) {
+            return jobRepository.findByOccupationName(occupation, pageable);
+        }
+        // If only skill is provided
+        if (skill != null && !skill.isEmpty()) {
+            return jobRepository.findBySkillName(skill, pageable);
+        }
+        // Return all jobs
         return jobRepository.findAll(pageable);
     }
 
@@ -171,6 +189,9 @@ public class JobController {
         String skillQuery = "MATCH (s:Skill)<-[r:HAS_SKILL]-(j:Job) RETURN s.name AS skill, count(r) AS count ORDER BY count DESC LIMIT 10";
         List<Map<String, Object>> jobsBySkill = neo4jClient.query(skillQuery).fetch().all().stream().map(row -> Map.of("skill", row.get("skill"), COUNT_KEY, row.get("count"))).collect(Collectors.toList());
 
+        String occupationQuery = "MATCH (o:Occupation)<-[r:HAS_OCCUPATION]-(j:Job) RETURN o.name AS occupation, count(r) AS count ORDER BY count DESC LIMIT 10";
+        List<Map<String, Object>> jobsByOccupation = neo4jClient.query(occupationQuery).fetch().all().stream().map(row -> Map.of("occupation", row.get("occupation"), COUNT_KEY, row.get("count"))).collect(Collectors.toList());
+
         Map<String, Object> stats = new HashMap<>();
         stats.put("totalJobs", totalJobs);
         stats.put("totalCompanies", totalCompanies);
@@ -178,6 +199,7 @@ public class JobController {
         stats.put("jobsByCountry", jobsByCountry);
         stats.put("jobsByCategory", jobsByCategory);
         stats.put("jobsBySkill", jobsBySkill);
+        stats.put("jobsByOccupation", jobsByOccupation);
 
         return ResponseEntity.ok(stats);
     }

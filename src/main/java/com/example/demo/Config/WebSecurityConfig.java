@@ -76,8 +76,14 @@ public class WebSecurityConfig {
                 .authorizeHttpRequests(auth ->
                         auth.requestMatchers("/api/auth/**").permitAll()
                             .requestMatchers("/ws/**").permitAll()
-                            .requestMatchers(HttpMethod.GET, "/api/jobs/**", "/api/stats").permitAll()
-                            .requestMatchers("/api/maintenance/**", "/api/backups/**").permitAll() // Allow public access to admin tasks
+                            // Public API endpoints - GET requests to jobs, stats, export
+                            .requestMatchers(HttpMethod.GET, "/api/jobs").permitAll()
+                            .requestMatchers(HttpMethod.GET, "/api/jobs/*").permitAll()
+                            .requestMatchers(HttpMethod.GET, "/api/export/**").permitAll()
+                            .requestMatchers(HttpMethod.GET, "/api/stats").permitAll()
+                            .requestMatchers("/api/maintenance/**").permitAll()
+                            .requestMatchers("/api/backups/**").permitAll()
+                            // All other requests require authentication
                             .anyRequest().authenticated()
                 );
 

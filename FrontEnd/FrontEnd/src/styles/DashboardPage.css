@@ -70,15 +70,18 @@
   display: flex;
   gap: 12px;
   justify-content: center;
+  align-items: stretch;
   margin-bottom: 50px; /* Spațiu mai mare înainte de statistici */
-  max-width: 800px;
+  max-width: 900px;
   margin-left: auto;
   margin-right: auto;
+  flex-wrap: wrap;
 }
 
 .search-input {
   padding: 16px 24px;
-  width: 70%; /* Mai lată */
+  flex: 1;
+  min-width: 250px;
   border-radius: 30px;
   border: 2px solid transparent;
   font-size: 1.1rem;
@@ -104,6 +107,7 @@
   font-weight: 600;
   box-shadow: 0 4px 15px rgba(0, 123, 255, 0.3);
   transition: all 0.3s ease;
+  white-space: nowrap;
 }
 
 .search-button:hover {
@@ -287,6 +291,7 @@
 
   .search-input {
     width: 100%;
+    min-width: unset;
   }
 
   .search-button {

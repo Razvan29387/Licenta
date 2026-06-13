@@ -9,9 +9,11 @@ const DashboardPage = () => {
     totalApplications: 0, 
     jobsByCountry: [],
     jobsByCategory: [],
-    jobsBySkill: [] // Added skills
+    jobsBySkill: [], // Added skills
+    jobsByOccupation: [] // Added occupations
   });
   const [searchTerm, setSearchTerm] = useState('');
+  const [skillTerm, setSkillTerm] = useState('');
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -26,7 +28,8 @@ const DashboardPage = () => {
               totalApplications: data.totalApplications || 0,
               jobsByCountry: data.jobsByCountry || [],
               jobsByCategory: data.jobsByCategory || [],
-              jobsBySkill: data.jobsBySkill || [] // Added skills
+              jobsBySkill: data.jobsBySkill || [], // Added skills
+              jobsByOccupation: data.jobsByOccupation || [] // Added occupations
           });
         }
       } catch (error) {
@@ -38,7 +41,20 @@ const DashboardPage = () => {
   }, []);
 
   const handleSearch = () => {
-    navigate('/jobs', { state: { search: searchTerm.trim() } });
+    // Combine search and skill into one search term
+    let combinedSearch = searchTerm.trim();
+    if (skillTerm.trim()) {
+      if (combinedSearch) {
+        combinedSearch = combinedSearch + " " + skillTerm.trim();
+      } else {
+        combinedSearch = skillTerm.trim();
+      }
+    }
+    navigate('/jobs', {
+      state: {
+        search: combinedSearch
+      }
+    });
   };
 
   const handleKeyDown = (e) => {
@@ -99,19 +115,34 @@ const DashboardPage = () => {
     return '📁';
   };
 
-  const getIconForSkill = (skillName) => {
-    if (!skillName) return '🔧';
-    const lowerSkill = skillName.toLowerCase();
-    if (lowerSkill.includes('java') || lowerSkill.includes('kotlin') || lowerSkill.includes('scala')) return '☕';
-    if (lowerSkill.includes('python')) return '🐍';
-    if (lowerSkill.includes('javascript') || lowerSkill.includes('js') || lowerSkill.includes('node') || lowerSkill.includes('typescript')) return '📜';
-    if (lowerSkill.includes('c#') || lowerSkill.includes('.net') || lowerSkill.includes('c++') || lowerSkill.includes('c')) return '⚙️';
-    if (lowerSkill.includes('react') || lowerSkill.includes('angular') || lowerSkill.includes('vue')) return '⚛️';
-    if (lowerSkill.includes('aws') || lowerSkill.includes('azure') || lowerSkill.includes('gcp')) return '☁️';
-    if (lowerSkill.includes('docker') || lowerSkill.includes('kubernetes')) return '🐳';
-    if (lowerSkill.includes('sql')) return '🗃️';
-    return '🔧';
-  };
+   const getIconForSkill = (skillName) => {
+     if (!skillName) return '🔧';
+     const lowerSkill = skillName.toLowerCase();
+     if (lowerSkill.includes('java') || lowerSkill.includes('kotlin') || lowerSkill.includes('scala')) return '☕';
+     if (lowerSkill.includes('python')) return '🐍';
+     if (lowerSkill.includes('javascript') || lowerSkill.includes('js') || lowerSkill.includes('node') || lowerSkill.includes('typescript')) return '📜';
+     if (lowerSkill.includes('c#') || lowerSkill.includes('.net') || lowerSkill.includes('c++') || lowerSkill.includes('c')) return '⚙️';
+     if (lowerSkill.includes('react') || lowerSkill.includes('angular') || lowerSkill.includes('vue')) return '⚛️';
+     if (lowerSkill.includes('aws') || lowerSkill.includes('azure') || lowerSkill.includes('gcp')) return '☁️';
+     if (lowerSkill.includes('docker') || lowerSkill.includes('kubernetes')) return '🐳';
+     if (lowerSkill.includes('sql')) return '🗃️';
+     return '🔧';
+   };
+
+   const getIconForOccupation = (occupationName) => {
+     if (!occupationName) return '👔';
+     const lowerOcc = occupationName.toLowerCase();
+     if (lowerOcc.includes('developer') || lowerOcc.includes('programmer') || lowerOcc.includes('engineer')) return '👨‍💻';
+     if (lowerOcc.includes('architect')) return '🏗️';
+     if (lowerOcc.includes('manager') || lowerOcc.includes('lead')) return '👨‍💼';
+     if (lowerOcc.includes('designer') || lowerOcc.includes('ux') || lowerOcc.includes('ui')) return '🎨';
+     if (lowerOcc.includes('analyst') || lowerOcc.includes('data')) return '📊';
+     if (lowerOcc.includes('tester') || lowerOcc.includes('qa')) return '🧪';
+     if (lowerOcc.includes('devops') || lowerOcc.includes('sre')) return '⚙️';
+     if (lowerOcc.includes('security')) return '🔒';
+     if (lowerOcc.includes('admin') || lowerOcc.includes('support')) return '🛠️';
+     return '👔';
+   };
 
   return (
     <div className="dashboard-container">
@@ -126,22 +157,30 @@ const DashboardPage = () => {
           Explore over <strong>{stats.totalJobs}</strong> jobs from <strong>{stats.totalCompanies}</strong> companies.
         </p>
         
-        <div className="search-container">
-          <input 
-            type="text" 
-            className="search-input"
-            placeholder="Job title, keywords, or company" 
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            onKeyDown={handleKeyDown}
-          />
-          <button 
-            className="search-button"
-            onClick={handleSearch}
-          >
-            Search
-          </button>
-        </div>
+         <div className="search-container">
+           <input 
+             type="text" 
+             className="search-input"
+             placeholder="Job title, keywords, or company" 
+             value={searchTerm}
+             onChange={(e) => setSearchTerm(e.target.value)}
+             onKeyDown={handleKeyDown}
+           />
+           <input 
+              type="text" 
+              className="search-input"
+              placeholder="Filter by skill (e.g., Python, React, Java)" 
+              value={skillTerm}
+              onChange={(e) => setSkillTerm(e.target.value)}
+              onKeyDown={handleKeyDown}
+            />
+           <button 
+             className="search-button"
+             onClick={handleSearch}
+           >
+             Search
+           </button>
+         </div>
 
         <div className="stats-container">
             <div className="stat-box">
@@ -197,25 +236,44 @@ const DashboardPage = () => {
               </div>
           )}
 
-          {stats.jobsBySkill && stats.jobsBySkill.length > 0 && (
-              <div className="stats-grid-section">
-                  <h3 className="grid-title">Top Skills</h3>
-                  <div className="grid">
-                      {stats.jobsBySkill.map((item, index) => (
-                          <div 
-                              key={`skill-${index}`} 
-                              className="grid-card"
-                              onClick={() => handleFilterClick('search', item.skill)}
-                          >
-                              <span>{getIconForSkill(item.skill)}</span>
-                              <span className="grid-name">{item.skill}</span>
-                              <span className="grid-count">{item.count} jobs</span>
-                          </div>
-                      ))}
-                  </div>
-              </div>
-          )}
-        </div>
+           {stats.jobsBySkill && stats.jobsBySkill.length > 0 && (
+               <div className="stats-grid-section">
+                   <h3 className="grid-title">Top Skills</h3>
+                   <div className="grid">
+                       {stats.jobsBySkill.map((item, index) => (
+                           <div
+                               key={`skill-${index}`}
+                               className="grid-card"
+                               onClick={() => handleFilterClick('search', item.skill)}
+                           >
+                               <span>{getIconForSkill(item.skill)}</span>
+                               <span className="grid-name">{item.skill}</span>
+                               <span className="grid-count">{item.count} jobs</span>
+                           </div>
+                       ))}
+                   </div>
+               </div>
+           )}
+
+           {stats.jobsByOccupation && stats.jobsByOccupation.length > 0 && (
+               <div className="stats-grid-section">
+                   <h3 className="grid-title">Popular Occupations</h3>
+                   <div className="grid">
+                       {stats.jobsByOccupation.map((item, index) => (
+                           <div
+                               key={`occupation-${index}`}
+                               className="grid-card"
+                               onClick={() => handleFilterClick('occupation', item.occupation)}
+                           >
+                               <span>{getIconForOccupation(item.occupation)}</span>
+                               <span className="grid-name">{item.occupation}</span>
+                               <span className="grid-count">{item.count} jobs</span>
+                           </div>
+                       ))}
+                   </div>
+               </div>
+           )}
+         </div>
       </div>
     </div>
   );
