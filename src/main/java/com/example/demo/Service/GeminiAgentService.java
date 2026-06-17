@@ -19,7 +19,7 @@ public class GeminiAgentService {
 
     @Value("${gemini.api.key}")
     private String GEMINI_API_KEY;
-    
+
     private final String GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent"; // Updated to latest model
 
     private final RestTemplate restTemplate;
@@ -63,7 +63,7 @@ public class GeminiAgentService {
             headers.setContentType(MediaType.APPLICATION_JSON);
 
             Map<String, Object> requestBody = new HashMap<>();
-            
+
             Map<String, Object> systemInstructionPart = new HashMap<>();
             systemInstructionPart.put("parts", List.of(Map.of("text", systemInstruction)));
             requestBody.put("system_instruction", systemInstructionPart);
@@ -81,11 +81,11 @@ public class GeminiAgentService {
 
             String fullUrl = GEMINI_API_URL + "?key=" + GEMINI_API_KEY;
             HttpEntity<Map<String, Object>> request = new HttpEntity<>(requestBody, headers);
-            
+
             ResponseEntity<String> response = restTemplate.postForEntity(fullUrl, request, String.class);
 
             JsonNode root = objectMapper.readTree(response.getBody());
-            
+
             return root.path("candidates").get(0)
                        .path("content")
                        .path("parts").get(0)

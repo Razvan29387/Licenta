@@ -1,5 +1,6 @@
 package com.example.demo.Controller;
 
+import com.example.demo.Service.BatchJobUpdateService;
 import com.example.demo.Service.DataMaintenanceService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -16,9 +17,11 @@ import java.util.stream.Collectors;
 public class MaintenanceController {
 
     private final DataMaintenanceService dataMaintenanceService;
+    private final BatchJobUpdateService batchJobUpdateService;
 
-    public MaintenanceController(DataMaintenanceService dataMaintenanceService) {
+    public MaintenanceController(DataMaintenanceService dataMaintenanceService, BatchJobUpdateService batchJobUpdateService) {
         this.dataMaintenanceService = dataMaintenanceService;
+        this.batchJobUpdateService = batchJobUpdateService;
     }
 
     @GetMapping("/tasks")
@@ -48,6 +51,18 @@ public class MaintenanceController {
     public ResponseEntity<String> triggerDatabasePruning() {
         new Thread(() -> dataMaintenanceService.triggerWeeklyPruning()).start();
         return ResponseEntity.ok("Database pruning process started in the background.");
+    }
+
+    @PostMapping("/clean-descriptions")
+    public ResponseEntity<String> cleanAllDescriptions() {
+        new Thread(() -> batchJobUpdateService.cleanHtmlFromDescriptions()).start();
+        return ResponseEntity.ok("HTML description cleaning process started in the background.");
+    }
+
+    @PostMapping("/reprocess-relationships")
+    public ResponseEntity<String> reprocessAllRelationships() {
+        batchJobUpdateService.reprocessAllJobRelationships();
+        return ResponseEntity.ok("Started reprocessing all job relationships in the background. This may take a while.");
     }
 
     @GetMapping("/pruning-archives")

@@ -5,6 +5,7 @@ import com.example.demo.Entity.Job;
 import com.example.demo.Repository.JobRepository;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.jsoup.Jsoup;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Async;
@@ -84,9 +85,31 @@ public class ArbeitnowIngestionService {
             String title = jobNode.path("title").asText();
             String url = jobNode.path("url").asText();
             String location = jobNode.path("location").asText("Unknown Location");
-            String description = jobNode.path("description").asText("No description available.");
+            String rawDescription = jobNode.path("description").asText("No description available.");
+            String cleanDescription = Jsoup.parse(rawDescription).text();
 
-            job = new Job(slug, title, location, "Unknown", url, "IT/Software", description, company);
+            job = new Job(slug, title, location, "Unknown", url, "IT/Software", cleanDescription, company);
+        }
+
+        if (jobNode.has("description") && !jobNode.get("description").isNull()) {
+            job.setDescription(Jsoup.parse(jobNode.path("description").asText()).text());
+        }
+        if (jobNode.has("title") && !jobNode.get("title").isNull()) {
+            job.setTitle(jobNode.path("title").asText());
+        }
+        if (jobNode.has("location") && !jobNode.get("location").isNull()) {
+            job.setLocation(jobNode.path("location").asText());
+        }
+
+        if (jobNode.has("job_types") && jobNode.get("job_types").isArray()) {
+            JsonNode jobTypes = jobNode.get("job_types");
+            if (jobTypes.size() > 0) {
+                job.setContractType(jobTypes.get(0).asText());
+            }
+        }
+
+        if (jobNode.has("remote") && !jobNode.get("remote").isNull()) {
+            job.setJobIsRemote(jobNode.path("remote").asBoolean());
         }
 
         if (jobNode.has("created_at") && !jobNode.get("created_at").isNull()) {

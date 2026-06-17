@@ -16,6 +16,10 @@ const AdminPage = () => {
     const [backups, setBackups] = useState([]);
     const [backupMessage, setBackupMessage] = useState('');
     const [isRestoring, setIsRestoring] = useState(null);
+    const [cleanupMessage, setCleanupMessage] = useState('');
+    const [isCleaning, setIsCleaning] = useState(false);
+    const [reprocessMessage, setReprocessMessage] = useState('');
+    const [isReprocessing, setIsReprocessing] = useState(false);
 
     // Demo & WebSocket state
     const [keywords, setKeywords] = useState('data analytics');
@@ -214,6 +218,44 @@ const AdminPage = () => {
         }
     };
 
+    const handleCleanDescriptions = async () => {
+        if (isCleaning) return;
+        setIsCleaning(true);
+        setCleanupMessage('Starting HTML cleanup process...');
+        try {
+            const response = await fetch('/api/maintenance/clean-descriptions', { 
+                method: 'POST',
+                headers: authHeader() 
+            });
+            const responseText = await response.text();
+            if (!response.ok) throw new Error(responseText || 'Failed to start cleanup');
+            setCleanupMessage(responseText);
+        } catch (error) {
+            setCleanupMessage(`Error: ${error.message}`);
+        } finally {
+            setTimeout(() => setIsCleaning(false), 5000);
+        }
+    };
+
+    const handleReprocessRelationships = async () => {
+        if (isReprocessing) return;
+        setIsReprocessing(true);
+        setReprocessMessage('Starting relationship reprocessing for all jobs...');
+        try {
+            const response = await fetch('/api/maintenance/reprocess-relationships', { 
+                method: 'POST',
+                headers: authHeader() 
+            });
+            const responseText = await response.text();
+            if (!response.ok) throw new Error(responseText || 'Failed to start reprocessing');
+            setReprocessMessage(responseText);
+        } catch (error) {
+            setReprocessMessage(`Error: ${error.message}`);
+        } finally {
+            setTimeout(() => setIsReprocessing(false), 10000);
+        }
+    };
+
     const getFlagForCountry = (countryCode) => {
         if (!countryCode) return '🌐';
         const code = countryCode.toUpperCase();
@@ -307,7 +349,6 @@ const AdminPage = () => {
                             <input 
                                 type="text" 
                                 className="keyword-input"
-                                style={{ padding: '10px', width: '100%', marginTop: '10px', borderRadius: '4px', border: '1px solid #ccc' }}
                                 value={keywords}
                                 onChange={(e) => setKeywords(e.target.value)}
                                 placeholder='e.g., data analytics, "cyber security"'
@@ -318,8 +359,7 @@ const AdminPage = () => {
                         <button 
                             onClick={handlePopulateByKeywords} 
                             disabled={isPopulating} 
-                            className="task-button demo-button" 
-                            style={{ backgroundColor: '#28a745', fontSize: '1.1em', width: '100%' }}
+                            className="task-button demo-button"
                         >
                             {isPopulating ? 'Process Running...' : '🚀 Start Live Demo'}
                         </button>
@@ -327,36 +367,27 @@ const AdminPage = () => {
                 </div>
 
                 {(isPopulating || progressEvents.length > 0) && (
-                    <div ref={progressPanelRef} className="progress-panel" style={{ marginTop: '20px', padding: '15px', backgroundColor: '#212529', borderRadius: '8px', color: '#f8f9fa', height: '400px', overflowY: 'auto', border: '1px solid #495057' }}>
-                        <h4 className="progress-title" style={{ margin: '0 0 15px 0', borderBottom: '1px solid #495057', paddingBottom: '10px', position: 'sticky', top: 0, backgroundColor: '#212529', zIndex: 1 }}>
+                    <div ref={progressPanelRef} className="progress-panel">
+                        <h4 className="progress-title">
                             {showSummary ? 'Final Summary' : 'Live Ingestion Log'}
                         </h4>
                         {showSummary ? renderSummary() : (
-                            <div className="log-container" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                            <div className="log-container">
                                 {progressEvents.map((event, index) => (
-                                    <div key={index} className="log-entry" style={{ padding: '10px', borderRadius: '4px', backgroundColor: '#343a40', borderLeft: `4px solid ${getStatusColor(event.status)}` }}>
-                                        <div className="log-header" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
+                                    <div key={index} className="log-entry" style={{ borderLeftColor: getStatusColor(event.status) }}>
+                                        <div className="log-header">
                                             <strong style={{ color: getStatusColor(event.status) }}>[{event.status}]</strong>
-                                            <span className="log-title" style={{ fontSize: '0.9em', color: '#adb5bd' }}>{event.jobTitle}</span>
+                                            <span className="log-title">{event.jobTitle}</span>
                                         </div>
-                                        <div className="log-details" style={{ fontSize: '0.95em', color: event.status === 'ERROR' ? '#ff6b6b' : '#f8f9fa' }}>{event.details}</div>
+                                        <div className="log-details">{event.details}</div>
                                     </div>
                                 ))}
                             </div>
                         )}
-                        <div style={{ marginTop: '25px', textAlign: 'center', paddingTop: '20px', borderTop: '1px dashed #ced4da' }}>
-                            <p style={{ color: '#adb5bd', fontSize: '0.95em', marginBottom: '10px' }}>To see the new nodes, run this query in Memgraph Lab:</p>
-                            <pre style={{ backgroundColor: '#e9ecef', padding: '10px', borderRadius: '4px', fontFamily: 'monospace', color: '#495057', display: 'block', whiteSpace: 'pre-wrap', wordWrap: 'break-word', textAlign: 'left' }}>
-                                MATCH (j:Job)-[r]-(c:Company) WHERE toLower(j.title) CONTAINS '{keywords.toLowerCase().split(' ')[0]}' RETURN j,r,c LIMIT 25
-                            </pre>
-                            <button onClick={() => window.open('http://localhost:3000', '_blank')} style={{ marginTop: '15px', padding: '10px 25px', border: 'none', borderRadius: '5px', backgroundColor: '#fd7e14', color: 'white', fontWeight: 'bold', cursor: 'pointer' }}>
-                                Open Memgraph Lab
-                            </button>
-                        </div>
                     </div>
                 )}
             </div>
-
+            
             <div className="section-container">
                 <h2 className="section-title">Data Import Tasks</h2>
                 <p className="section-subtitle">All import tasks run automatically once per day. You can also trigger them manually below.</p>
@@ -374,13 +405,36 @@ const AdminPage = () => {
             <div className="section-container">
                 <h2 className="section-title">Maintenance Tasks</h2>
                 <div className="task-card">
+                    <div className="task-info">
+                        <h3>Reprocess All Relationships</h3>
+                        <p>Scans all jobs and re-creates missing links to Companies, Skills, and Occupations. Use this to fix old data.</p>
+                    </div>
+                    <div className="task-actions">
+                        <button onClick={handleReprocessRelationships} disabled={isReprocessing} className="task-button" style={{backgroundColor: '#e74c3c'}}>
+                            {isReprocessing ? 'Reprocessing...' : 'Fix Relationships'}
+                        </button>
+                        {reprocessMessage && <p className={`feedback-message ${reprocessMessage.includes('Error') ? 'error' : 'success'}`}>{reprocessMessage}</p>}
+                    </div>
+                </div>
+                <div className="task-card">
+                    <div className="task-info">
+                        <h3>Clean Job Descriptions</h3>
+                        <p>Scans all jobs in the database and removes any HTML tags from their descriptions.</p>
+                    </div>
+                    <div className="task-actions">
+                        <button onClick={handleCleanDescriptions} disabled={isCleaning} className="task-button" style={{backgroundColor: '#fd7e14'}}>
+                            {isCleaning ? 'Cleaning...' : 'Clean Descriptions'}
+                        </button>
+                        {cleanupMessage && <p className={`feedback-message ${cleanupMessage.includes('Error') ? 'error' : 'success'}`}>{cleanupMessage}</p>}
+                    </div>
+                </div>
+                <div className="task-card">
                     <div className="task-info"><h3>Weekly Database Pruning</h3><p>Archives and deletes jobs older than 14 days. Runs automatically every Sunday.</p></div>
                     <div className="task-actions">
                         <button onClick={handleTriggerPruning} disabled={isPruning} className="task-button">{isPruning ? 'Pruning...' : 'Trigger Pruning'}</button>
                         {pruningMessage && <p className={`feedback-message ${pruningMessage.includes('Error') ? 'error' : 'success'}`}>{pruningMessage}</p>}
                     </div>
                 </div>
-
                 <div className="task-card" style={{ marginTop: '20px' }}>
                      <div className="task-info">
                          <h3>Restore from Pruning Archives</h3>

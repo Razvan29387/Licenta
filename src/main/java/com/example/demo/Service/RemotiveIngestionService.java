@@ -5,6 +5,7 @@ import com.example.demo.Entity.Job;
 import com.example.demo.Repository.JobRepository;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.jsoup.Jsoup;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Async;
@@ -13,6 +14,7 @@ import org.springframework.web.client.RestTemplate;
 
 import java.time.LocalDateTime;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
 @Service
@@ -27,7 +29,6 @@ public class RemotiveIngestionService {
     private final NerExtractionService nerExtractionService;
     private final WebSocketProgressService progressService;
 
-    // Folosim categoria "software-dev" pentru a aduce doar joburi IT
     private final String BASE_URL = "https://remotive.com/api/remote-jobs?category=software-dev&search=";
 
     public RemotiveIngestionService(JobRepository jobRepository, EntityResolutionService entityResolutionService, NerExtractionService nerExtractionService, WebSocketProgressService progressService) {
@@ -49,7 +50,7 @@ public class RemotiveIngestionService {
 
             if (jobsNode.isArray()) {
                 for (JsonNode jobNode : jobsNode) {
-                    saveOrUpdateJob(jobNode);
+                    saveOrUpdateJob(jobNode, false);
                 }
             }
         } catch (Exception e) {
@@ -68,8 +69,7 @@ public class RemotiveIngestionService {
             JsonNode root = objectMapper.readTree(jsonResponse);
             JsonNode jobsNode = root.path("jobs");
 
-            if (jobsNode.isArray()) {
-                // Limit to 40 jobs for demo purposes
+            if (jobsNode.isArray() && jobsNode.size() > 0) {
                 int limit = Math.min(jobsNode.size(), 40);
                 for (int i = 0; i < limit; i++) {
                     JsonNode jobNode = jobsNode.get(i);
@@ -77,14 +77,14 @@ public class RemotiveIngestionService {
                     progressService.sendProgress("PROCESSING", jobTitle, "Checking job details...");
                     
                     try {
-                        Thread.sleep(500); 
-                        saveOrUpdateJob(jobNode);
+                        Thread.sleep(200); 
+                        saveOrUpdateJob(jobNode, true);
                     } catch (Exception e) {
                         progressService.sendProgress("ERROR", jobTitle, e.getMessage());
                     }
                 }
             } else {
-                 progressService.sendProgress("SKIPPED", "No Results", "API returned no data.");
+                 progressService.sendProgress("SKIPPED", "No Results", "API returned no data for this keyword.");
             }
         } catch (Exception e) {
             progressService.sendProgress("ERROR", "API Call Failed", e.getMessage());
@@ -92,19 +92,19 @@ public class RemotiveIngestionService {
         progressService.sendProgress("FINISHED", "Import Complete", "All jobs have been processed.");
     }
 
-    private boolean saveOrUpdateJob(JsonNode jobNode) {
+    private void saveOrUpdateJob(JsonNode jobNode, boolean reportProgress) {
         String jobId = jobNode.path("id").asText();
         String title = jobNode.path("title").asText("Untitled Job");
 
         if (jobId == null || jobId.isEmpty() || jobId.equals("null")) {
-            progressService.sendProgress("SKIPPED", title, "Job has no ID.");
-            return false;
+            if(reportProgress) progressService.sendProgress("SKIPPED", title, "Job has no ID.");
+            return;
         }
 
         Optional<Job> existingJobOpt = jobRepository.findByAdzunaId(jobId);
         if (existingJobOpt.isPresent()) {
-            progressService.sendProgress("SKIPPED", title, "Job already exists.");
-            return false;
+            if(reportProgress) progressService.sendProgress("SKIPPED", title, "Job already exists.");
+            return;
         }
 
         String companyName = jobNode.path("company_name").asText("Unknown Company").trim();
@@ -115,9 +115,10 @@ public class RemotiveIngestionService {
         if (location.isEmpty() || location.equals("null")) location = "Worldwide";
         
         String category = jobNode.path("category").asText("IT/Software");
-        String description = jobNode.path("description").asText("No description available.");
+        String rawDescription = jobNode.path("description").asText("No description available.");
+        String cleanDescription = Jsoup.parse(rawDescription).text();
 
-        Job job = new Job(jobId, title, location, "Unknown", url, category, description, company);
+        Job job = new Job(jobId, title, location, "Unknown", url, category, cleanDescription, company);
 
         if (jobNode.has("publication_date") && !jobNode.get("publication_date").isNull()) {
              try {
@@ -125,9 +126,7 @@ public class RemotiveIngestionService {
                 if(dateStr.length() >= 19) {
                      job.setCreatedAt(LocalDateTime.parse(dateStr.substring(0, 19)));
                 }
-             } catch (Exception e) {
-                 // ignore
-             }
+             } catch (Exception e) { /* ignore */ }
         }
 
         job.setCompanyName(company.getName());
@@ -136,12 +135,13 @@ public class RemotiveIngestionService {
         }
 
         Job savedJob = jobRepository.save(job);
-        nerExtractionService.processJob(savedJob);
         
-        Job finalJob = jobRepository.findById(savedJob.getId()).orElse(savedJob);
-        String skills = finalJob.getSkills().stream().map(s -> s.getName()).collect(Collectors.joining(", "));
-        progressService.sendProgress("SAVED", title, "Skills: " + (skills.isEmpty() ? "None found" : skills));
-
-        return true;
+        CompletableFuture<Job> futureJob = nerExtractionService.processJob(savedJob);
+        futureJob.thenAccept(finalJob -> {
+            if (reportProgress) {
+                String skills = finalJob.getSkills().stream().map(s -> s.getName()).collect(Collectors.joining(", "));
+                progressService.sendProgress("SAVED", title, "Skills: " + (skills.isEmpty() ? "None found" : skills));
+            }
+        });
     }
 }

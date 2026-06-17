@@ -5,6 +5,7 @@ import com.example.demo.Entity.Job;
 import com.example.demo.Repository.JobRepository;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.jsoup.Jsoup;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -51,8 +52,6 @@ public class JsearchIngestionService {
 
     @Async("taskExecutor")
     public void importJobs(String query, int numPages) {
-        // This method is for regular, non-demo imports. It doesn't need progress reporting.
-        // We can create a simpler version of import logic here if needed, or just call the progress one.
         importJobsAndReportProgress(query, numPages);
     }
 
@@ -86,7 +85,7 @@ public class JsearchIngestionService {
                             progressService.sendProgress("PROCESSING", jobTitle, "Checking job details...");
                             
                             try {
-                                Thread.sleep(200); // Small delay for visual effect
+                                Thread.sleep(200);
                                 saveOrUpdateJob(jobNode);
                             } catch (Exception e) {
                                 log.error("Error saving individual job: " + e.getMessage());
@@ -135,9 +134,10 @@ public class JsearchIngestionService {
         if(location.isEmpty() || location.equals(", ") || location.equals("null")) location = "Unknown Location";
         
         String category = "IT/Software";
-        String description = jobNode.path("job_description").asText("No description available.");
+        String rawDescription = jobNode.path("job_description").asText("No description available.");
+        String cleanDescription = Jsoup.parse(rawDescription).text();
 
-        Job job = new Job(jobId, jobTitle, location, country, url, category, description, company);
+        Job job = new Job(jobId, jobTitle, location, country, url, category, cleanDescription, company);
 
         if (jobNode.has("job_posted_at_datetime_utc") && !jobNode.get("job_posted_at_datetime_utc").isNull()) {
              try {
@@ -153,7 +153,6 @@ public class JsearchIngestionService {
 
         Job savedJob = jobRepository.save(job);
         
-        // Process NER asynchronously and send WebSocket message upon completion
         CompletableFuture<Job> futureJob = nerExtractionService.processJob(savedJob);
         futureJob.thenAccept(finalJob -> {
             String skills = finalJob.getSkills().stream().map(s -> s.getName()).collect(Collectors.joining(", "));

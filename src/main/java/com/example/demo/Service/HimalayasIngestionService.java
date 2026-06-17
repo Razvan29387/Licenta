@@ -5,6 +5,7 @@ import com.example.demo.Entity.Job;
 import com.example.demo.Repository.JobRepository;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.jsoup.Jsoup;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Async;
@@ -109,12 +110,40 @@ public class HimalayasIngestionService {
             
             String location = "Remote"; 
             String category = "IT/Software";
-            String description = jobNode.path("description").asText("No description available.");
+            String rawDescription = jobNode.path("description").asText("No description available.");
             if (jobNode.has("excerpt") && !jobNode.get("excerpt").isNull() && !jobNode.get("excerpt").asText().isEmpty()) {
-                description = jobNode.get("excerpt").asText();
+                rawDescription = jobNode.get("excerpt").asText();
             }
+            String cleanDescription = Jsoup.parse(rawDescription).text();
 
-            job = new Job(jobId, title, location, "Unknown", url, category, description, company);
+            job = new Job(jobId, title, location, "Unknown", url, category, cleanDescription, company);
+        }
+
+        if (jobNode.has("title") && !jobNode.get("title").isNull()) {
+            job.setTitle(jobNode.path("title").asText());
+        }
+        if (jobNode.has("excerpt") && !jobNode.get("excerpt").isNull() && !jobNode.get("excerpt").asText().isEmpty()) {
+            job.setDescription(Jsoup.parse(jobNode.path("excerpt").asText()).text());
+        }
+        
+        job.setJobIsRemote(true);
+
+        if (jobNode.has("minSalary") && !jobNode.get("minSalary").isNull()) {
+            job.setSalaryMin(jobNode.path("minSalary").asDouble());
+        }
+        if (jobNode.has("maxSalary") && !jobNode.get("maxSalary").isNull()) {
+            job.setSalaryMax(jobNode.path("maxSalary").asDouble());
+        }
+        if (job.getSalaryMin() != null || job.getSalaryMax() != null) {
+            job.setSalaryPeriod("year"); 
+        }
+
+        if (jobNode.has("seniority") && !jobNode.get("seniority").isNull()) {
+             job.setExperienceLevel(jobNode.path("seniority").asText());
+        }
+        
+        if (jobNode.has("employmentType") && !jobNode.get("employmentType").isNull()) {
+             job.setContractType(jobNode.path("employmentType").asText());
         }
 
         if (jobNode.has("pubDate") && !jobNode.get("pubDate").isNull()) {

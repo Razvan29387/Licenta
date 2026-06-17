@@ -1,9 +1,15 @@
 package com.example.demo.Service;
 
+import com.example.demo.Entity.Company;
 import com.example.demo.Entity.Job;
 import com.example.demo.Repository.JobRepository;
+import org.jsoup.Jsoup;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -14,19 +20,19 @@ import java.util.regex.Pattern;
 public class BatchJobUpdateService {
 
     private static final Logger log = LoggerFactory.getLogger(BatchJobUpdateService.class);
+    private static final int BATCH_SIZE = 500;
 
     private final JobRepository jobRepository;
+    private final EntityResolutionService entityResolutionService;
+    private final NerExtractionService nerExtractionService;
 
-    public BatchJobUpdateService(JobRepository jobRepository) {
+    public BatchJobUpdateService(JobRepository jobRepository, EntityResolutionService entityResolutionService, NerExtractionService nerExtractionService) {
         this.jobRepository = jobRepository;
+        this.entityResolutionService = entityResolutionService;
+        this.nerExtractionService = nerExtractionService;
     }
 
-    /**
-     * Updates all existing jobs in the database to infer their remote status
-     * and contract type from their descriptions or titles.
-     * This is useful for migrating old data to the new schema format.
-     */
-    @Transactional
+    @Transactional("transactionManager")
     public void updateAllJobsWithRemoteAndContractType() {
         log.info("Batch update: Starting inference of remote status and contract type for existing jobs...");
         
@@ -46,18 +52,16 @@ public class BatchJobUpdateService {
             if (job.getDescription() != null) searchString += job.getDescription() + " ";
             if (job.getLocation() != null) searchString += job.getLocation();
 
-            // 1. Infer Remote Status
             if (job.getJobIsRemote() == null) {
                 if (remotePattern.matcher(searchString).find() || "Remote".equalsIgnoreCase(job.getCountry())) {
                     job.setJobIsRemote(true);
                     changed = true;
                 } else if (!searchString.isEmpty()) {
-                    job.setJobIsRemote(false); // Only set to false if we actually searched something
+                    job.setJobIsRemote(false);
                     changed = true;
                 }
             }
 
-            // 2. Infer Contract Type
             if (job.getContractType() == null || job.getContractType().isEmpty()) {
                 if (fullTimePattern.matcher(searchString).find()) {
                     job.setContractType("full_time");
@@ -81,5 +85,77 @@ public class BatchJobUpdateService {
         }
 
         log.info("Batch update finished: Successfully inferred data for {} jobs.", updateCount);
+    }
+
+    @Async("taskExecutor")
+    @Transactional("transactionManager")
+    public void reprocessAllJobRelationships() {
+        log.info("--- STARTING BATCH REPROCESSING OF COMPANY RELATIONSHIPS ---");
+        
+        int page = 0;
+        Page<Job> jobPage;
+        int totalProcessed = 0;
+
+        do {
+            Pageable pageable = PageRequest.of(page, BATCH_SIZE);
+            jobPage = jobRepository.findAll(pageable);
+            List<Job> jobsToProcess = jobPage.getContent();
+
+            if (!jobsToProcess.isEmpty()) {
+                log.info("Reprocessing batch {} ({} jobs)...", page, jobsToProcess.size());
+                
+                for (Job job : jobsToProcess) {
+                    if (job.getCompanyName() != null && !job.getCompanyName().isBlank()) {
+                        Company company = entityResolutionService.findOrCreateCompany(job.getCompanyName());
+                        job.setCompany(company);
+                    }
+                }
+                
+                jobRepository.saveAll(jobsToProcess);
+
+                totalProcessed += jobsToProcess.size();
+                log.info("Processed {} jobs for company linking.", totalProcessed);
+            }
+            page++;
+        } while (jobPage.hasNext());
+
+        log.info("--- FINISHED REPROCESSING COMPANY RELATIONSHIPS ---");
+    }
+
+    @Transactional("transactionManager")
+    public void cleanHtmlFromDescriptions() {
+        log.info("Batch update: Starting HTML cleanup from job descriptions in batches...");
+        
+        int page = 0;
+        Page<Job> jobPage;
+        int totalProcessed = 0;
+        int totalCleaned = 0;
+
+        do {
+            Pageable pageable = PageRequest.of(page, BATCH_SIZE);
+            jobPage = jobRepository.findAll(pageable);
+            List<Job> jobsToProcess = jobPage.getContent();
+
+            if (!jobsToProcess.isEmpty()) {
+                boolean batchChanged = false;
+                for (Job job : jobsToProcess) {
+                    if (job.getDescription() != null && job.getDescription().matches(".*<[a-zA-Z]+.*?>.*")) {
+                        String cleanDescription = Jsoup.parse(job.getDescription()).text();
+                        job.setDescription(cleanDescription);
+                        batchChanged = true;
+                        totalCleaned++;
+                    }
+                }
+                
+                if (batchChanged) {
+                    jobRepository.saveAll(jobsToProcess);
+                }
+                totalProcessed += jobsToProcess.size();
+                log.info("Processed {} jobs, cleaned {}", totalProcessed, totalCleaned);
+            }
+            page++;
+        } while (jobPage.hasNext());
+
+        log.info("Batch HTML cleanup finished. Cleaned descriptions for {} out of {} total jobs.", totalCleaned, totalProcessed);
     }
 }

@@ -5,6 +5,7 @@ import com.example.demo.Entity.Job;
 import com.example.demo.Repository.JobRepository;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.jsoup.Jsoup;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -93,7 +94,7 @@ public class JoobleIngestionService {
                         log.warn("Jooble - Received response without 'jobs' array on page {}", page);
                     }
 
-                    Thread.sleep(1000);
+                    Thread.sleep(1000); 
 
                 } catch (Exception e) {
                     log.error("Jooble - Error importing page {}: {}", page, e.getMessage());
@@ -134,11 +135,27 @@ public class JoobleIngestionService {
             String title = jobNode.path("title").asText("Untitled Job");
             String jobLocation = jobNode.path("location").asText("Unknown Location");
             String category = "IT/Software";
-            String description = jobNode.path("snippet").asText("No description available.");
+            String rawDescription = jobNode.path("snippet").asText("No description available.");
+            String cleanDescription = Jsoup.parse(rawDescription).text();
 
-            job = new Job(jobId, title, jobLocation, "Unknown", url, category, description, company);
+            job = new Job(jobId, title, jobLocation, "Unknown", url, category, cleanDescription, company);
         }
 
+        if (jobNode.has("title") && !jobNode.get("title").isNull()) {
+            job.setTitle(jobNode.path("title").asText());
+        }
+        if (jobNode.has("snippet") && !jobNode.get("snippet").isNull()) {
+            job.setDescription(Jsoup.parse(jobNode.path("snippet").asText()).text());
+        }
+        if (jobNode.has("type") && !jobNode.get("type").isNull()) {
+            job.setContractType(jobNode.path("type").asText());
+        }
+        if (jobNode.has("salary") && !jobNode.get("salary").isNull()) {
+            String salaryStr = jobNode.path("salary").asText();
+            if (!salaryStr.isEmpty() && !salaryStr.equals("null")) {
+                job.setSalaryPeriod(salaryStr); 
+            }
+        }
         if (jobNode.has("updated") && !jobNode.get("updated").isNull()) {
             try {
                 String dateStr = jobNode.path("updated").asText();
