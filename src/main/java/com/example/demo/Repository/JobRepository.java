@@ -15,21 +15,32 @@ public interface JobRepository extends Neo4jRepository<Job, Long> {
     boolean existsByAdzunaId(String adzunaId);
     Optional<Job> findByAdzunaId(String adzunaId);
 
-    Page<Job> findByCountry(String country, Pageable pageable);
-    Page<Job> findByCategory(String category, Pageable pageable);
+    @Query(value = "MATCH (j:Job) WHERE toLower(j.country) = toLower($country) " +
+                   "WITH j ORDER BY j.createdAt DESC SKIP $skip LIMIT $limit " +
+                   "OPTIONAL MATCH (j)-[r:POSTED_BY]->(c:Company) " +
+                   "RETURN j, collect(r), collect(c)",
+           countQuery = "MATCH (j:Job) WHERE toLower(j.country) = toLower($country) RETURN count(j)")
+    Page<Job> findByCountry(@Param("country") String country, Pageable pageable);
+
+    @Query(value = "MATCH (j:Job) WHERE toLower(j.category) = toLower($category) " +
+                   "WITH j ORDER BY j.createdAt DESC SKIP $skip LIMIT $limit " +
+                   "OPTIONAL MATCH (j)-[r:POSTED_BY]->(c:Company) " +
+                   "RETURN j, collect(r), collect(c)",
+           countQuery = "MATCH (j:Job) WHERE toLower(j.category) = toLower($category) RETURN count(j)")
+    Page<Job> findByCategory(@Param("category") String category, Pageable pageable);
 
     @Query(value = "MATCH (j:Job) " +
-           "WHERE j.title IS NOT NULL AND toLower(j.title) CONTAINS toLower($keyword) " +
-           "OR j.companyName IS NOT NULL AND toLower(j.companyName) CONTAINS toLower($keyword) " +
-           "OR j.country IS NOT NULL AND toLower(j.country) CONTAINS toLower($keyword) " +
-           "OR j.location IS NOT NULL AND toLower(j.location) CONTAINS toLower($keyword) " +
+           "WHERE toLower(j.title) CONTAINS toLower($keyword) " +
+           "OR toLower(j.companyName) CONTAINS toLower($keyword) " +
+           "OR toLower(j.location) CONTAINS toLower($keyword) " +
            "OR (j.description IS NOT NULL AND toLower(j.description) CONTAINS toLower($keyword)) " +
-           "RETURN j",
+           "WITH j ORDER BY j.createdAt DESC SKIP $skip LIMIT $limit " +
+           "OPTIONAL MATCH (j)-[r:POSTED_BY]->(c:Company) " +
+           "RETURN j, collect(r), collect(c)",
            countQuery = "MATCH (j:Job) " +
-                        "WHERE j.title IS NOT NULL AND toLower(j.title) CONTAINS toLower($keyword) " +
-                        "OR j.companyName IS NOT NULL AND toLower(j.companyName) CONTAINS toLower($keyword) " +
-                        "OR j.country IS NOT NULL AND toLower(j.country) CONTAINS toLower($keyword) " +
-                        "OR j.location IS NOT NULL AND toLower(j.location) CONTAINS toLower($keyword) " +
+                        "WHERE toLower(j.title) CONTAINS toLower($keyword) " +
+                        "OR toLower(j.companyName) CONTAINS toLower($keyword) " +
+                        "OR toLower(j.location) CONTAINS toLower($keyword) " +
                         "OR (j.description IS NOT NULL AND toLower(j.description) CONTAINS toLower($keyword)) " +
                         "RETURN count(j)")
     Page<Job> searchJobsByKeyword(@Param("keyword") String keyword, Pageable pageable);
@@ -45,50 +56,4 @@ public interface JobRepository extends Neo4jRepository<Job, Long> {
 
     @Query("MATCH (j:Job) WHERE j.createdAt IS NULL OR j.createdAt < $date RETURN id(j)")
     List<Long> findIdsByCreatedAtBefore(@Param("date") LocalDateTime date);
-
-    @Query(value = "MATCH (j:Job) " +
-           "WHERE toLower(j.title) CONTAINS toLower($skillName) " +
-           "OR (j.description IS NOT NULL AND toLower(j.description) CONTAINS toLower($skillName)) " +
-           "OR ANY(lang IN j.programmingLanguages WHERE toLower(lang) CONTAINS toLower($skillName)) " +
-           "OR EXISTS((j)-[:HAS_SKILL]->(s:Skill) WHERE toLower(s.name) CONTAINS toLower($skillName)) " +
-           "RETURN DISTINCT j",
-           countQuery = "MATCH (j:Job) " +
-                        "WHERE toLower(j.title) CONTAINS toLower($skillName) " +
-                        "OR (j.description IS NOT NULL AND toLower(j.description) CONTAINS toLower($skillName)) " +
-                        "OR ANY(lang IN j.programmingLanguages WHERE toLower(lang) CONTAINS toLower($skillName)) " +
-                        "OR EXISTS((j)-[:HAS_SKILL]->(s:Skill) WHERE toLower(s.name) CONTAINS toLower($skillName)) " +
-                        "RETURN count(DISTINCT j)")
-    Page<Job> findBySkillName(@Param("skillName") String skillName, Pageable pageable);
-
-    @Query(value = "MATCH (j:Job)-[:HAS_OCCUPATION]->(o:Occupation) " +
-           "WHERE toLower(o.name) CONTAINS toLower($occupationName) " +
-           "RETURN DISTINCT j",
-           countQuery = "MATCH (j:Job)-[:HAS_OCCUPATION]->(o:Occupation) " +
-                        "WHERE toLower(o.name) CONTAINS toLower($occupationName) " +
-                        "RETURN count(DISTINCT j)")
-    Page<Job> findByOccupationName(@Param("occupationName") String occupationName, Pageable pageable);
-
-    @Query(value = "MATCH (j:Job) " +
-           "WHERE (toLower(j.title) CONTAINS toLower($keyword) " +
-           "OR toLower(j.companyName) CONTAINS toLower($keyword) " +
-           "OR toLower(j.country) CONTAINS toLower($keyword) " +
-           "OR toLower(j.location) CONTAINS toLower($keyword) " +
-           "OR (j.description IS NOT NULL AND toLower(j.description) CONTAINS toLower($keyword))) " +
-           "AND (toLower(j.title) CONTAINS toLower($skillName) " +
-           "OR (j.description IS NOT NULL AND toLower(j.description) CONTAINS toLower($skillName)) " +
-           "OR ANY(lang IN j.programmingLanguages WHERE toLower(lang) CONTAINS toLower($skillName)) " +
-           "OR EXISTS((j)-[:HAS_SKILL]->(s:Skill) WHERE toLower(s.name) CONTAINS toLower($skillName))) " +
-           "RETURN DISTINCT j",
-           countQuery = "MATCH (j:Job) " +
-                        "WHERE (toLower(j.title) CONTAINS toLower($keyword) " +
-                        "OR toLower(j.companyName) CONTAINS toLower($keyword) " +
-                        "OR toLower(j.country) CONTAINS toLower($keyword) " +
-                        "OR toLower(j.location) CONTAINS toLower($keyword) " +
-                        "OR (j.description IS NOT NULL AND toLower(j.description) CONTAINS toLower($keyword))) " +
-                        "AND (toLower(j.title) CONTAINS toLower($skillName) " +
-                        "OR (j.description IS NOT NULL AND toLower(j.description) CONTAINS toLower($skillName)) " +
-                        "OR ANY(lang IN j.programmingLanguages WHERE toLower(lang) CONTAINS toLower($skillName)) " +
-                        "OR EXISTS((j)-[:HAS_SKILL]->(s:Skill) WHERE toLower(s.name) CONTAINS toLower($skillName))) " +
-                        "RETURN count(DISTINCT j)")
-    Page<Job> searchJobsByKeywordAndSkill(@Param("keyword") String keyword, @Param("skillName") String skillName, Pageable pageable);
 }

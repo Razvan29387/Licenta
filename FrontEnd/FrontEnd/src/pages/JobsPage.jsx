@@ -77,7 +77,7 @@ const JobsPage = () => {
     return 'Find Your Dream Job';
   };
 
-  if (loading) return <div style={{textAlign: 'center', marginTop: '50px', fontSize: '1.2rem'}}>Loading amazing jobs...</div>;
+  if (loading) return <div style={{textAlign: 'center', marginTop: '50px', fontSize: '1.2rem'}}>Loading...</div>;
 
   return (
     <div style={{ padding: '40px', backgroundColor: '#f4f7f6', minHeight: '100vh' }}>

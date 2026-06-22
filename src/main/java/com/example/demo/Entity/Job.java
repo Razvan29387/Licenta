@@ -68,6 +68,7 @@ public class Job {
 
     // Getters and Setters
     public Long getId() { return id; }
+    public void setId(Long id) { this.id = id; } // Added for testing purposes
 
     public String getAdzunaId() { return adzunaId; }
     public void setAdzunaId(String adzunaId) { this.adzunaId = adzunaId; }

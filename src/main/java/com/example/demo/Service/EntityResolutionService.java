@@ -41,31 +41,26 @@ public class EntityResolutionService {
         }
         String formattedName = name.trim().toUpperCase();
 
-        // 1. Check cache for exact match
         if (companyCache.containsKey(formattedName)) {
             return companyCache.get(formattedName);
         }
 
-        // 2. Check database for exact match (in case another thread added it)
         Optional<Company> exactMatchDb = companyRepository.findByName(formattedName);
         if (exactMatchDb.isPresent()) {
             companyCache.put(formattedName, exactMatchDb.get());
             return exactMatchDb.get();
         }
 
-        // 3. Fuzzy match against the cache
         String normalizedInput = normalizeCompanyName(formattedName);
         for (Company existingCompany : companyCache.values()) {
             String normalizedExisting = normalizeCompanyName(existingCompany.getName());
             if (calculateSimilarity(normalizedInput, normalizedExisting) >= SIMILARITY_THRESHOLD) {
                 log.debug("Fuzzy match found: '{}' -> '{}'", name, existingCompany.getName());
-                // Cache the new raw name to point to the existing company for faster future lookups
                 companyCache.put(formattedName, existingCompany);
                 return existingCompany;
             }
         }
 
-        // 4. If no match, create a new company
         log.info("No similar company found. Creating new company: {}", formattedName);
         Company newCompany = new Company(formattedName);
         Company savedCompany = companyRepository.save(newCompany);
@@ -77,7 +72,7 @@ public class EntityResolutionService {
         if (name == null) return "";
         String n = name.toLowerCase()
                 .replaceAll("[\\.,\\-']", " ")
-                .replaceAll("\\s+(srl|s\\.r\\.l|inc|llc|ltd|gmbh|ag|sa|s\\.a|romania|uk|usa|global|group)\\b", "");
+                .replaceAll("\\s+(srl|s\\.r\\.l|inc|llc|ltd|gmbh|ag|sa|s\\.a|romania|uk|usa|global|group|corp|corporation)\\b", "");
         return n.replaceAll("\\s+", " ").trim();
     }
 
