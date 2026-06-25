@@ -50,7 +50,7 @@ public class RemotiveIngestionService {
 
             if (jobsNode.isArray()) {
                 for (JsonNode jobNode : jobsNode) {
-                    saveOrUpdateJob(jobNode, false);
+                    saveOrUpdateJob(jobNode, false); // No NER for regular import
                 }
             }
         } catch (Exception e) {
@@ -78,7 +78,7 @@ public class RemotiveIngestionService {
                     
                     try {
                         Thread.sleep(200); 
-                        saveOrUpdateJob(jobNode, true);
+                        saveOrUpdateJob(jobNode, true); // Run NER for demo
                     } catch (Exception e) {
                         progressService.sendProgress("ERROR", jobTitle, e.getMessage());
                     }
@@ -92,18 +92,18 @@ public class RemotiveIngestionService {
         progressService.sendProgress("FINISHED", "Import Complete", "All jobs have been processed.");
     }
 
-    private void saveOrUpdateJob(JsonNode jobNode, boolean reportProgress) {
+    private void saveOrUpdateJob(JsonNode jobNode, boolean runNer) {
         String jobId = jobNode.path("id").asText();
         String title = jobNode.path("title").asText("Untitled Job");
 
         if (jobId == null || jobId.isEmpty() || jobId.equals("null")) {
-            if(reportProgress) progressService.sendProgress("SKIPPED", title, "Job has no ID.");
+            if(runNer) progressService.sendProgress("SKIPPED", title, "Job has no ID.");
             return;
         }
 
         Optional<Job> existingJobOpt = jobRepository.findByAdzunaId(jobId);
         if (existingJobOpt.isPresent()) {
-            if(reportProgress) progressService.sendProgress("SKIPPED", title, "Job already exists.");
+            if(runNer) progressService.sendProgress("SKIPPED", title, "Job already exists.");
             return;
         }
 
@@ -136,12 +136,14 @@ public class RemotiveIngestionService {
 
         Job savedJob = jobRepository.save(job);
         
-        CompletableFuture<Job> futureJob = nerExtractionService.processJob(savedJob);
-        futureJob.thenAccept(finalJob -> {
-            if (reportProgress) {
+        if (runNer) {
+            CompletableFuture<Job> futureJob = nerExtractionService.processJob(savedJob);
+            futureJob.thenAccept(finalJob -> {
                 String skills = finalJob.getSkills().stream().map(s -> s.getName()).collect(Collectors.joining(", "));
                 progressService.sendProgress("SAVED", title, "Skills: " + (skills.isEmpty() ? "None found" : skills));
-            }
-        });
+            });
+        } else {
+            log.info("Saved new Remotive job ID {} without running NER.", savedJob.getId());
+        }
     }
 }

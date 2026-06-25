@@ -60,7 +60,7 @@ const JobDetailsPage = () => {
             if (!response.ok) {
                 throw new Error(responseText || 'Failed to submit application.');
             }
-            
+
             setApplicationMessage('Application submitted successfully!');
             setTimeout(() => {
                 setShowApplyModal(false);
@@ -81,7 +81,7 @@ const JobDetailsPage = () => {
     return (
         <div className="job-details-container">
             <Link to="/jobs" className="back-link">&larr; Back to all jobs</Link>
-            
+
             <div className="job-details-card">
                 {/* Job Details Header */}
                 <div className="job-details-header">
@@ -115,9 +115,9 @@ const JobDetailsPage = () => {
                 {/* Job Description */}
                 <div className="job-description-section">
                     <h2>Job Description</h2>
-                    <div 
+                    <div
                         className="description-content"
-                        dangerouslySetInnerHTML={{ __html: job.description }} 
+                        dangerouslySetInnerHTML={{ __html: job.description }}
                     />
                 </div>
 

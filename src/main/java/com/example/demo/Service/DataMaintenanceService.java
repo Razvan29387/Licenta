@@ -3,6 +3,7 @@ package com.example.demo.Service;
 import com.example.demo.Entity.Job;
 import com.example.demo.Repository.JobRepository;
 import com.fasterxml.jackson.core.JsonGenerator;
+import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
@@ -33,7 +34,7 @@ public class DataMaintenanceService {
 
     private static final Logger log = LoggerFactory.getLogger(DataMaintenanceService.class);
     private static final int BATCH_SIZE = 500;
-    private static final int PRUNING_BATCH_SIZE = 10; // Redus foarte mult pentru a preveni erorile de buffer Netty pe date mari
+    private static final int PRUNING_BATCH_SIZE = 50;
 
     private static final int ADZUNA_DAILY_REQUEST_BUDGET = 240;
     private static final int ARBEITNOW_PAGES_TO_FETCH = 30;
@@ -71,6 +72,7 @@ public class DataMaintenanceService {
         this.objectMapper = new ObjectMapper();
         this.objectMapper.registerModule(new JavaTimeModule());
         this.objectMapper.getFactory().disable(JsonGenerator.Feature.AUTO_CLOSE_TARGET);
+        this.objectMapper.getFactory().disable(JsonParser.Feature.AUTO_CLOSE_SOURCE);
     }
 
     public List<String> getAvailableImportTasks() {
@@ -119,6 +121,12 @@ public class DataMaintenanceService {
             jsearchIngestionService.importJobsAndReportProgress(keywords, 2);
         } else if ("remotive-software".equalsIgnoreCase(apiSource)) {
             remotiveIngestionService.importJobsAndReportProgress(keywords);
+        } else if ("arbeitnow".equalsIgnoreCase(apiSource)) {
+            arbeitnowIngestionService.importJobsAndReportProgress(1);
+        } else if ("himalayas-remote".equalsIgnoreCase(apiSource)) {
+            himalayasIngestionService.importJobsAndReportProgress(20);
+        } else if ("jooble-it".equalsIgnoreCase(apiSource)) {
+            joobleIngestionService.importJobsAndReportProgress(keywords, 1);
         } else {
             log.warn("Unsupported API source for demo: {}", apiSource);
         }
@@ -136,11 +144,12 @@ public class DataMaintenanceService {
     }
 
     @Scheduled(cron = "0 0 15 * * SUN")
+    @Transactional("transactionManager")
     public void triggerWeeklyPruning() {
         log.info("--- STARTING BATCHED WEEKLY DATABASE PRUNING (ID-BASED) ---");
 
-        LocalDateTime timeThreshold = LocalDateTime.now().minusDays(36); // Changed to 36 days to ensure more jobs
-        log.info("Finding IDs for jobs older than 36 days (threshold: {}).", timeThreshold);
+        LocalDateTime timeThreshold = LocalDateTime.now().minusDays(14);
+        log.info("Finding IDs for jobs older than 14 days (threshold: {}).", timeThreshold);
 
         List<Long> oldJobIds = jobRepository.findIdsByCreatedAtBefore(timeThreshold);
 
@@ -178,11 +187,9 @@ public class DataMaintenanceService {
                         jobRepository.deleteAll(jobsBatch);
                         totalDeleted += jobsBatch.size();
                     }
-                    // Scurtă pauză pentru a nu copleși conexiunea de rețea cu driverul Neo4j
                     Thread.sleep(100); 
                 } catch (Exception e) {
                     log.error("Error processing batch {} to {}. Skipping this batch. Error: {}", i, end, e.getMessage());
-                    // Dacă un lot eșuează (ex: memorie), continuăm cu restul pentru a nu bloca întreg procesul
                 }
             }
 
@@ -197,13 +204,11 @@ public class DataMaintenanceService {
     private void archiveJobsBatch(List<Job> jobs, ZipOutputStream zos) throws IOException {
         long timestamp = System.currentTimeMillis();
         
-        // 1. Archive as JSON
         ZipEntry jsonEntry = new ZipEntry("batch_" + timestamp + ".json");
         zos.putNextEntry(jsonEntry);
         objectMapper.writerWithDefaultPrettyPrinter().writeValue(zos, jobs);
         zos.closeEntry();
 
-        // 2. Archive as CSV
         ZipEntry csvEntry = new ZipEntry("batch_" + timestamp + ".csv");
         zos.putNextEntry(csvEntry);
         
@@ -230,9 +235,8 @@ public class DataMaintenanceService {
                 };
                 csvWriter.writeNext(data);
             }
-            csvWriter.close(); // Closes the StringWriter safely
+            csvWriter.close();
 
-            // Write the constructed CSV string to the ZipOutputStream
             zos.write(stringWriter.toString().getBytes(StandardCharsets.UTF_8));
         }
         zos.closeEntry();

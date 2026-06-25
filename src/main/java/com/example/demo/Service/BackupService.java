@@ -4,6 +4,10 @@ import com.example.demo.Entity.Company;
 import com.example.demo.Entity.Job;
 import com.example.demo.Repository.CompanyRepository;
 import com.example.demo.Repository.JobRepository;
+import com.example.demo.Entity.User;
+import com.example.demo.Entity.Role;
+import com.example.demo.Repository.UserRepository;
+import com.example.demo.Repository.RoleRepository;
 import jakarta.annotation.PostConstruct;
 import org.neo4j.driver.Driver;
 import org.neo4j.driver.Session;
@@ -35,11 +39,15 @@ public class BackupService implements DisposableBean {
 
     private final JobRepository jobRepository;
     private final CompanyRepository companyRepository;
+    private final UserRepository userRepository;
+    private final RoleRepository roleRepository;
     private final Driver driver;
 
-    public BackupService(JobRepository jobRepository, CompanyRepository companyRepository, Driver driver) {
+    public BackupService(JobRepository jobRepository, CompanyRepository companyRepository, UserRepository userRepository, RoleRepository roleRepository, Driver driver) {
         this.jobRepository = jobRepository;
         this.companyRepository = companyRepository;
+        this.userRepository = userRepository;
+        this.roleRepository = roleRepository;
         this.driver = driver;
     }
 
@@ -71,7 +79,15 @@ public class BackupService implements DisposableBean {
                 .filter(j -> j != null && j.getAdzunaId() != null && !j.getAdzunaId().isBlank())
                 .collect(Collectors.toList());
 
-        if (validCompanies.isEmpty() && validJobs.isEmpty()) return null;
+        List<User> validUsers = userRepository.findAll().stream()
+                .filter(u -> u != null && u.getUsername() != null && !u.getUsername().isBlank())
+                .collect(Collectors.toList());
+
+        List<Role> validRoles = roleRepository.findAll().stream()
+                .filter(r -> r != null && r.getName() != null)
+                .collect(Collectors.toList());
+
+        if (validCompanies.isEmpty() && validJobs.isEmpty() && validUsers.isEmpty() && validRoles.isEmpty()) return null;
 
         // Pregătim folderul
         File backupDir = new File(BACKUP_DIR);
@@ -116,6 +132,44 @@ public class BackupService implements DisposableBean {
                 }
             }
 
+            // 4. Creăm Nodurile de tip Skill și Relațiile HAS_SKILL
+            for (Job j : validJobs) {
+                if (j.getSkills() != null) {
+                    for (var skill : j.getSkills()) {
+                        if (skill.getName() != null && !skill.getName().isBlank()) {
+                            writer.println(String.format("MERGE (s:`Skill` {`name`: '%s'});", escapeCypher(skill.getName())));
+                            writer.println(String.format("MATCH (u:`Job`), (s:`Skill`) WHERE u.`adzunaId` = '%s' AND s.`name` = '%s' MERGE (u)-[:`HAS_SKILL`]->(s);", escapeCypher(j.getAdzunaId()), escapeCypher(skill.getName())));
+                        }
+                    }
+                }
+            }
+
+            // 5. Creăm Nodurile de tip Role
+            for (Role r : validRoles) {
+                writer.println(String.format("MERGE (:`Role` {`name`: '%s'});", escapeCypher(String.valueOf(r.getName()))));
+            }
+
+            // 6. Creăm Nodurile de tip User
+            for (User u : validUsers) {
+                writer.println(String.format(
+                        "MERGE (u:`User` {`username`: '%s'}) SET u.`email` = '%s', u.`password` = '%s';",
+                        escapeCypher(u.getUsername()),
+                        escapeCypher(u.getEmail()),
+                        escapeCypher(u.getPassword())
+                ));
+            }
+
+            // 7. Creăm Relațiile HAS_ROLE între User și Role
+            for (User u : validUsers) {
+                if (u.getRoles() != null) {
+                    for (Role role : u.getRoles()) {
+                        if (role != null && role.getName() != null) {
+                            writer.println(String.format("MATCH (u:`User`), (r:`Role`) WHERE u.`username` = '%s' AND r.`name` = '%s' MERGE (u)-[:`HAS_ROLE`]->(r);", escapeCypher(u.getUsername()), escapeCypher(String.valueOf(role.getName()))));
+                        }
+                    }
+                }
+            }
+
             // Flush final pentru siguranță totală
             writer.flush();
         }
@@ -135,7 +189,7 @@ public class BackupService implements DisposableBean {
             return;
         }
 
-        Instant threshold = Instant.now().minus(12, ChronoUnit.HOURS);
+        Instant threshold = Instant.now().minus(48, ChronoUnit.HOURS);
         int deletedCount = 0;
 
         try (Stream<Path> paths = Files.walk(Paths.get(BACKUP_DIR), 1)) {

@@ -52,16 +52,22 @@ public class JsearchIngestionService {
 
     @Async("taskExecutor")
     public void importJobs(String query, int numPages) {
-        importJobsAndReportProgress(query, numPages);
+        // Regular import, run without NER
+        importAndProcess(query, numPages, false);
     }
 
     @Async("taskExecutor")
     public void importJobsAndReportProgress(String query, int numPages) {
-        log.info("JSearch - Starting real-time import for query: '{}', pages: {}", query, numPages);
+        // Demo import, run with NER and progress reporting
+        importAndProcess(query, numPages, true);
+    }
+
+    private void importAndProcess(String query, int numPages, boolean isDemo) {
+        log.info("JSearch - Starting import for query: '{}', pages: {}, Demo mode: {}", query, numPages, isDemo);
 
         if (API_KEY == null || API_KEY.isEmpty() || API_KEY.contains("placeholder")) {
             log.error("JSearch - API Key is missing or invalid.");
-            progressService.sendProgress("ERROR", "Configuration Error", "JSearch API Key is missing.");
+            if (isDemo) progressService.sendProgress("ERROR", "Configuration Error", "JSearch API Key is missing.");
             return;
         }
 
@@ -81,46 +87,42 @@ public class JsearchIngestionService {
 
                     if (data.isArray()) {
                         for (JsonNode jobNode : data) {
-                            String jobTitle = jobNode.path("job_title").asText("Untitled Job");
-                            progressService.sendProgress("PROCESSING", jobTitle, "Checking job details...");
-                            
-                            try {
+                            if (isDemo) {
+                                String jobTitle = jobNode.path("job_title").asText("Untitled Job");
+                                progressService.sendProgress("PROCESSING", jobTitle, "Checking job details...");
                                 Thread.sleep(200);
-                                saveOrUpdateJob(jobNode);
-                            } catch (Exception e) {
-                                log.error("Error saving individual job: " + e.getMessage());
-                                progressService.sendProgress("ERROR", jobTitle, e.getMessage());
                             }
+                            saveOrUpdateJob(jobNode, isDemo);
                         }
                     }
                     if (page < numPages) Thread.sleep(1000);
                 } catch (Exception e) {
                     log.error("JSearch - Error importing page {}: {}", page, e.getMessage());
-                    progressService.sendProgress("ERROR", "API Call Failed", "Could not fetch data for page " + page);
+                    if (isDemo) progressService.sendProgress("ERROR", "API Call Failed", "Could not fetch data for page " + page);
                     if (e.getMessage().contains("429")) break; 
                     if (page < numPages) Thread.sleep(1000);
                 }
             }
         } catch (Exception mainEx) {
              log.error("JSearch - Fatal error setting up the import request", mainEx);
-             progressService.sendProgress("ERROR", "Fatal Error", mainEx.getMessage());
+             if (isDemo) progressService.sendProgress("ERROR", "Fatal Error", mainEx.getMessage());
         }
-        progressService.sendProgress("FINISHED", "Import Complete", "All pages have been processed.");
-        log.info("JSearch - Real-time import finished for query: '{}'", query);
+        if (isDemo) progressService.sendProgress("FINISHED", "Import Complete", "All pages have been processed.");
+        log.info("JSearch - Import finished for query: '{}'", query);
     }
 
-    private void saveOrUpdateJob(JsonNode jobNode) {
+    private void saveOrUpdateJob(JsonNode jobNode, boolean runNer) {
         String jobId = jobNode.path("job_id").asText();
         String jobTitle = jobNode.path("job_title").asText("Untitled Job");
 
         if(jobId == null || jobId.isEmpty() || jobId.equals("null")) {
-             progressService.sendProgress("SKIPPED", jobTitle, "Job has no ID.");
+             if(runNer) progressService.sendProgress("SKIPPED", jobTitle, "Job has no ID.");
              return;
         }
 
         Optional<Job> existingJobOpt = jobRepository.findByAdzunaId(jobId);
         if (existingJobOpt.isPresent()) {
-            progressService.sendProgress("SKIPPED", jobTitle, "Job already exists in the database.");
+            if(runNer) progressService.sendProgress("SKIPPED", jobTitle, "Job already exists in the database.");
             return;
         }
 
@@ -153,10 +155,14 @@ public class JsearchIngestionService {
 
         Job savedJob = jobRepository.save(job);
         
-        CompletableFuture<Job> futureJob = nerExtractionService.processJob(savedJob);
-        futureJob.thenAccept(finalJob -> {
-            String skills = finalJob.getSkills().stream().map(s -> s.getName()).collect(Collectors.joining(", "));
-            progressService.sendProgress("SAVED", finalJob.getTitle(), "Skills: " + (skills.isEmpty() ? "None found" : skills));
-        });
+        if (runNer) {
+            CompletableFuture<Job> futureJob = nerExtractionService.processJob(savedJob);
+            futureJob.thenAccept(finalJob -> {
+                String skills = finalJob.getSkills().stream().map(s -> s.getName()).collect(Collectors.joining(", "));
+                progressService.sendProgress("SAVED", finalJob.getTitle(), "Skills: " + (skills.isEmpty() ? "None found" : skills));
+            });
+        } else {
+            log.info("Saved new job ID {} without running NER.", savedJob.getId());
+        }
     }
 }

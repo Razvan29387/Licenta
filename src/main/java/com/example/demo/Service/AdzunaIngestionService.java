@@ -5,6 +5,7 @@ import com.example.demo.Entity.Job;
 import com.example.demo.Repository.JobRepository;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.jsoup.Jsoup;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -14,6 +15,7 @@ import org.springframework.web.client.RestTemplate;
 
 import java.time.OffsetDateTime;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
 @Service
@@ -50,11 +52,29 @@ public class AdzunaIngestionService {
     @Async("taskExecutor")
     public void importJobs(String country, int startPage, int endPage) {
         log.info("Adzuna ({}) - Starting IT-only import from page {} to {}", country.toUpperCase(), startPage, endPage);
+        // Regular import, no NER
+        importAndProcess(country, "it-jobs", startPage, endPage, false);
+        batchJobUpdateService.updateAllJobsWithRemoteAndContractType();
+    }
+
+    @Async("taskExecutor")
+    public void importJobsAndReportProgress(String country, String keyword, int numPages) {
+        log.info("Adzuna - Starting real-time import for keyword: '{}', pages: {}", keyword, numPages);
+        // Demo import, with NER
+        importAndProcess(country, keyword, 1, numPages, true);
+    }
+
+    private void importAndProcess(String country, String keyword, int startPage, int endPage, boolean isDemo) {
+        if (APP_ID == null || APP_ID.isEmpty() || APP_KEY == null || APP_KEY.isEmpty()) {
+            if (isDemo) progressService.sendProgress("ERROR", "Configuration Error", "Adzuna API credentials are missing.");
+            log.error("Adzuna API credentials are missing.");
+            return;
+        }
 
         for (int page = startPage; page <= endPage; page++) {
             try {
-                String url = String.format("%s/%s/search/%d?app_id=%s&app_key=%s&results_per_page=50&content-type=application/json&category=it-jobs",
-                        BASE_URL, country, page, APP_ID, APP_KEY);
+                String url = String.format("%s/%s/search/%d?app_id=%s&app_key=%s&results_per_page=50&content-type=application/json&what=%s",
+                        BASE_URL, country, page, APP_ID, APP_KEY, keyword);
 
                 String jsonResponse = restTemplate.getForObject(url, String.class);
                 JsonNode root = objectMapper.readTree(jsonResponse);
@@ -62,77 +82,36 @@ public class AdzunaIngestionService {
 
                 if (results.isArray()) {
                     for (JsonNode jobNode : results) {
-                        saveOrUpdateJob(jobNode, country);
-                    }
-                }
-
-                Thread.sleep(1000);
-
-            } catch (Exception e) {
-                log.error("Adzuna ({}) - Error importing page {}: {}", country.toUpperCase(), page, e.getMessage());
-            }
-        }
-        log.info("Adzuna ({}) - Import finished.", country.toUpperCase());
-        batchJobUpdateService.updateAllJobsWithRemoteAndContractType();
-    }
-
-    @Async("taskExecutor")
-    public void importJobsAndReportProgress(String country, String keyword, int numPages) {
-        log.info("Adzuna - Starting real-time import for keyword: '{}', pages: {}", keyword, numPages);
-
-        if (APP_ID == null || APP_ID.isEmpty() || APP_KEY == null || APP_KEY.isEmpty()) {
-            progressService.sendProgress("ERROR", "Configuration Error", "Adzuna API credentials are missing.");
-            return;
-        }
-
-        try {
-            for (int page = 1; page <= numPages; page++) {
-                try {
-                    // Note: Adzuna search uses 'what' parameter for keywords
-                    String url = String.format("%s/%s/search/%d?app_id=%s&app_key=%s&results_per_page=20&content-type=application/json&what=%s",
-                            BASE_URL, country, page, APP_ID, APP_KEY, keyword);
-
-                    String jsonResponse = restTemplate.getForObject(url, String.class);
-                    JsonNode root = objectMapper.readTree(jsonResponse);
-                    JsonNode results = root.path("results");
-
-                    if (results.isArray()) {
-                        for (JsonNode jobNode : results) {
+                        if (isDemo) {
                             String jobTitle = jobNode.path("title").asText("Untitled Job");
                             progressService.sendProgress("PROCESSING", jobTitle, "Checking job details...");
-                            
-                            try {
-                                Thread.sleep(500); 
-                                saveOrUpdateJob(jobNode, country);
-                            } catch (Exception e) {
-                                progressService.sendProgress("ERROR", jobTitle, e.getMessage());
-                            }
+                            Thread.sleep(200);
                         }
+                        saveOrUpdateJob(jobNode, country, isDemo);
                     }
-                    if (page < numPages) Thread.sleep(1000);
-                } catch (Exception e) {
-                    progressService.sendProgress("ERROR", "API Call Failed", "Could not fetch data for page " + page);
-                    if (page < numPages) Thread.sleep(1000);
                 }
+                if (page < endPage) Thread.sleep(1000);
+            } catch (Exception e) {
+                log.error("Adzuna ({}) - Error importing page {}: {}", country.toUpperCase(), page, e.getMessage());
+                if (isDemo) progressService.sendProgress("ERROR", "API Call Failed", "Could not fetch data for page " + page);
             }
-        } catch (Exception mainEx) {
-             progressService.sendProgress("ERROR", "Fatal Error", mainEx.getMessage());
         }
-        progressService.sendProgress("FINISHED", "Import Complete", "All pages have been processed.");
+        if (isDemo) progressService.sendProgress("FINISHED", "Import Complete", "All pages have been processed.");
+        log.info("Adzuna ({}) - Import finished for keyword '{}'.", country.toUpperCase(), keyword);
     }
 
-    private void saveOrUpdateJob(JsonNode jobNode, String countryCode) {
+    private void saveOrUpdateJob(JsonNode jobNode, String countryCode, boolean runNer) {
         String adzunaId = jobNode.path("id").asText();
         String title = jobNode.path("title").asText("Untitled Job");
 
         if(adzunaId == null || adzunaId.isEmpty() || adzunaId.equals("null")) {
-             progressService.sendProgress("SKIPPED", title, "Job has no ID.");
+             if(runNer) progressService.sendProgress("SKIPPED", title, "Job has no ID.");
              return;
         }
 
         Optional<Job> existingJobOpt = jobRepository.findByAdzunaId(adzunaId);
         if (existingJobOpt.isPresent()) {
-            progressService.sendProgress("SKIPPED", title, "Job already exists.");
+            if(runNer) progressService.sendProgress("SKIPPED", title, "Job already exists.");
             return;
         }
 
@@ -143,17 +122,16 @@ public class AdzunaIngestionService {
         String location = jobNode.path("location").path("display_name").asText("Unknown Location");
         String country = countryCode.toUpperCase();
         String category = jobNode.path("category").path("label").asText("Uncategorized");
-        String description = jobNode.path("description").asText("No description available.");
+        String rawDescription = jobNode.path("description").asText("No description available.");
+        String cleanDescription = Jsoup.parse(rawDescription).text();
 
-        Job job = new Job(adzunaId, title, location, country, url, category, description, company);
+        Job job = new Job(adzunaId, title, location, country, url, category, cleanDescription, company);
 
         if (jobNode.has("created") && !jobNode.get("created").isNull()) {
             try {
                 OffsetDateTime odt = OffsetDateTime.parse(jobNode.path("created").asText());
                 job.setCreatedAt(odt.toLocalDateTime());
-            } catch (Exception e) {
-                // ignore
-            }
+            } catch (Exception e) { /* ignore */ }
         }
 
         job.setCompanyName(company.getName());
@@ -162,10 +140,15 @@ public class AdzunaIngestionService {
         }
 
         Job savedJob = jobRepository.save(job);
-        nerExtractionService.processJob(savedJob);
         
-        Job finalJob = jobRepository.findById(savedJob.getId()).orElse(savedJob);
-        String skills = finalJob.getSkills().stream().map(s -> s.getName()).collect(Collectors.joining(", "));
-        progressService.sendProgress("SAVED", title, "Skills: " + (skills.isEmpty() ? "None found" : skills));
+        if (runNer) {
+            CompletableFuture<Job> futureJob = nerExtractionService.processJob(savedJob);
+            futureJob.thenAccept(finalJob -> {
+                String skills = finalJob.getSkills().stream().map(s -> s.getName()).collect(Collectors.joining(", "));
+                progressService.sendProgress("SAVED", title, "Skills: " + (skills.isEmpty() ? "None found" : skills));
+            });
+        } else {
+            log.info("Saved new Adzuna job ID {} without running NER.", savedJob.getId());
+        }
     }
 }

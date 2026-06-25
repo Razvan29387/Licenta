@@ -16,36 +16,36 @@ public interface JobRepository extends Neo4jRepository<Job, Long> {
     Optional<Job> findByAdzunaId(String adzunaId);
 
     @Query(value = "MATCH (j:Job) WHERE toLower(j.country) = toLower($country) " +
-                   "WITH j ORDER BY j.createdAt DESC SKIP $skip LIMIT $limit " +
-                   "OPTIONAL MATCH (j)-[r:POSTED_BY]->(c:Company) " +
-                   "RETURN j, collect(r), collect(c)",
-           countQuery = "MATCH (j:Job) WHERE toLower(j.country) = toLower($country) RETURN count(j)")
+            "WITH j ORDER BY j.createdAt DESC SKIP $skip LIMIT $limit " +
+            "OPTIONAL MATCH (j)-[r:POSTED_BY]->(c:Company) " +
+            "RETURN j, collect(r), collect(c)",
+            countQuery = "MATCH (j:Job) WHERE toLower(j.country) = toLower($country) RETURN count(j)")
     Page<Job> findByCountry(@Param("country") String country, Pageable pageable);
 
     @Query(value = "MATCH (j:Job) WHERE toLower(j.category) = toLower($category) " +
-                   "WITH j ORDER BY j.createdAt DESC SKIP $skip LIMIT $limit " +
-                   "OPTIONAL MATCH (j)-[r:POSTED_BY]->(c:Company) " +
-                   "RETURN j, collect(r), collect(c)",
-           countQuery = "MATCH (j:Job) WHERE toLower(j.category) = toLower($category) RETURN count(j)")
+            "WITH j ORDER BY j.createdAt DESC SKIP $skip LIMIT $limit " +
+            "OPTIONAL MATCH (j)-[r:POSTED_BY]->(c:Company) " +
+            "RETURN j, collect(r), collect(c)",
+            countQuery = "MATCH (j:Job) WHERE toLower(j.category) = toLower($category) RETURN count(j)")
     Page<Job> findByCategory(@Param("category") String category, Pageable pageable);
 
     @Query(value = "MATCH (j:Job) " +
-           "WHERE toLower(j.title) CONTAINS toLower($keyword) " +
-           "OR toLower(j.companyName) CONTAINS toLower($keyword) " +
-           "OR toLower(j.location) CONTAINS toLower($keyword) " +
-           "OR (j.description IS NOT NULL AND toLower(j.description) CONTAINS toLower($keyword)) " +
-           "WITH j ORDER BY j.createdAt DESC SKIP $skip LIMIT $limit " +
-           "OPTIONAL MATCH (j)-[r:POSTED_BY]->(c:Company) " +
-           "RETURN j, collect(r), collect(c)",
-           countQuery = "MATCH (j:Job) " +
-                        "WHERE toLower(j.title) CONTAINS toLower($keyword) " +
-                        "OR toLower(j.companyName) CONTAINS toLower($keyword) " +
-                        "OR toLower(j.location) CONTAINS toLower($keyword) " +
-                        "OR (j.description IS NOT NULL AND toLower(j.description) CONTAINS toLower($keyword)) " +
-                        "RETURN count(j)")
+            "WHERE toLower(j.title) CONTAINS toLower($keyword) " +
+            "OR toLower(j.companyName) CONTAINS toLower($keyword) " +
+            "OR toLower(j.location) CONTAINS toLower($keyword) " +
+            "OR (j.description IS NOT NULL AND toLower(j.description) CONTAINS toLower($keyword)) " +
+            "WITH j ORDER BY j.createdAt DESC SKIP $skip LIMIT $limit " +
+            "OPTIONAL MATCH (j)-[r:POSTED_BY]->(c:Company) " +
+            "RETURN j, collect(r), collect(c)",
+            countQuery = "MATCH (j:Job) " +
+                    "WHERE toLower(j.title) CONTAINS toLower($keyword) " +
+                    "OR toLower(j.companyName) CONTAINS toLower($keyword) " +
+                    "OR toLower(j.location) CONTAINS toLower($keyword) " +
+                    "OR (j.description IS NOT NULL AND toLower(j.description) CONTAINS toLower($keyword)) " +
+                    "RETURN count(j)")
     Page<Job> searchJobsByKeyword(@Param("keyword") String keyword, Pageable pageable);
 
-    @Query("MATCH (j:Job)-[:POSTED_BY]->(c:Company) WHERE c.name = $companyName RETURN j, c")
+    @Query("MATCH (j:Job)-[:POSTED_BY]->(c:Company) WHERE c.name = $CompanyName RETURN j, c")
     List<Job> findByCompanyName(@Param("companyName") String companyName);
 
     @Query("MATCH (j:Job)-[:POSTED_BY]->(c:Company) WHERE id(c) = $companyId RETURN j")

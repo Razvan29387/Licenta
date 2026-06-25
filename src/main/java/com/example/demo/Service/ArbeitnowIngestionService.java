@@ -16,6 +16,8 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+import java.util.stream.Collectors;
 
 @Service
 public class ArbeitnowIngestionService {
@@ -27,21 +29,32 @@ public class ArbeitnowIngestionService {
     private final ObjectMapper objectMapper;
     private final EntityResolutionService entityResolutionService;
     private final NerExtractionService nerExtractionService;
+    private final WebSocketProgressService progressService;
 
     private final String BASE_URL = "https://www.arbeitnow.com/api/job-board-api";
 
-    public ArbeitnowIngestionService(JobRepository jobRepository, EntityResolutionService entityResolutionService, NerExtractionService nerExtractionService) {
+    public ArbeitnowIngestionService(JobRepository jobRepository, EntityResolutionService entityResolutionService, NerExtractionService nerExtractionService, WebSocketProgressService progressService) {
         this.jobRepository = jobRepository;
         this.restTemplate = new RestTemplate();
         this.objectMapper = new ObjectMapper();
         this.entityResolutionService = entityResolutionService;
         this.nerExtractionService = nerExtractionService;
+        this.progressService = progressService;
     }
 
     @Async("taskExecutor")
     public void importJobs(int startPage, int endPage) {
-        log.info("Arbeitnow - Starting import from page {} to {}", startPage, endPage);
+        log.info("Arbeitnow - Starting regular import from page {} to {}", startPage, endPage);
+        importAndProcess(startPage, endPage, false);
+    }
 
+    @Async("taskExecutor")
+    public void importJobsAndReportProgress(int numPages) {
+        log.info("Arbeitnow - Starting demo import for {} pages", numPages);
+        importAndProcess(1, numPages, true);
+    }
+
+    private void importAndProcess(int startPage, int endPage, boolean isDemo) {
         for (int page = startPage; page <= endPage; page++) {
             try {
                 String url = BASE_URL + "?page=" + page + "&search=it,software,developer,engineer,data";
@@ -52,83 +65,69 @@ public class ArbeitnowIngestionService {
 
                 if (results.isArray()) {
                     for (JsonNode jobNode : results) {
-                        saveOrUpdateJob(jobNode);
+                        if (isDemo) {
+                            String jobTitle = jobNode.path("title").asText("Untitled Job");
+                            progressService.sendProgress("PROCESSING", jobTitle, "Checking job details...");
+                            Thread.sleep(200);
+                        }
+                        saveOrUpdateJob(jobNode, isDemo);
                     }
                 }
-
-                Thread.sleep(1000);
-
+                if (page < endPage) Thread.sleep(1000);
             } catch (Exception e) {
                 log.error("Arbeitnow - Error importing page {}: {}", page, e.getMessage());
+                if (isDemo) progressService.sendProgress("ERROR", "API Call Failed", "Could not fetch data for page " + page);
             }
         }
+        if (isDemo) progressService.sendProgress("FINISHED", "Import Complete", "All pages have been processed.");
         log.info("Arbeitnow - Import finished.");
     }
 
-    private void saveOrUpdateJob(JsonNode jobNode) {
+    private void saveOrUpdateJob(JsonNode jobNode, boolean runNer) {
         String slug = jobNode.path("slug").asText();
+        String title = jobNode.path("title").asText("Untitled Job");
+
         if (slug.isEmpty()) {
-            log.warn("Arbeitnow - Skipped job with empty slug.");
+            if(runNer) progressService.sendProgress("SKIPPED", title, "Job has no ID.");
+            return;
+        }
+
+        Optional<Job> existingJobOpt = jobRepository.findByAdzunaId(slug);
+        if (existingJobOpt.isPresent()) {
+            if(runNer) progressService.sendProgress("SKIPPED", title, "Job already exists.");
             return;
         }
 
         String companyName = jobNode.path("company_name").asText("Unknown Company").trim();
         Company company = entityResolutionService.findOrCreateCompany(companyName);
 
-        Optional<Job> existingJobOpt = jobRepository.findByAdzunaId(slug);
-        Job job;
+        String url = jobNode.path("url").asText();
+        String location = jobNode.path("location").asText("Unknown Location");
+        String rawDescription = jobNode.path("description").asText("No description available.");
+        String cleanDescription = Jsoup.parse(rawDescription).text();
 
-        if (existingJobOpt.isPresent()) {
-            job = existingJobOpt.get();
-            job.setCompany(company);
-        } else {
-            String title = jobNode.path("title").asText();
-            String url = jobNode.path("url").asText();
-            String location = jobNode.path("location").asText("Unknown Location");
-            String rawDescription = jobNode.path("description").asText("No description available.");
-            String cleanDescription = Jsoup.parse(rawDescription).text();
-
-            job = new Job(slug, title, location, "Unknown", url, "IT/Software", cleanDescription, company);
-        }
-
-        if (jobNode.has("description") && !jobNode.get("description").isNull()) {
-            job.setDescription(Jsoup.parse(jobNode.path("description").asText()).text());
-        }
-        if (jobNode.has("title") && !jobNode.get("title").isNull()) {
-            job.setTitle(jobNode.path("title").asText());
-        }
-        if (jobNode.has("location") && !jobNode.get("location").isNull()) {
-            job.setLocation(jobNode.path("location").asText());
-        }
-
-        if (jobNode.has("job_types") && jobNode.get("job_types").isArray()) {
-            JsonNode jobTypes = jobNode.get("job_types");
-            if (jobTypes.size() > 0) {
-                job.setContractType(jobTypes.get(0).asText());
-            }
-        }
-
-        if (jobNode.has("remote") && !jobNode.get("remote").isNull()) {
-            job.setJobIsRemote(jobNode.path("remote").asBoolean());
-        }
-
+        Job job = new Job(slug, title, location, "Unknown", url, "IT/Software", cleanDescription, company);
+        
         if (jobNode.has("created_at") && !jobNode.get("created_at").isNull()) {
             try {
                 long timestamp = jobNode.path("created_at").asLong();
-                LocalDateTime ldt = LocalDateTime.ofInstant(Instant.ofEpochSecond(timestamp), ZoneOffset.UTC);
-                job.setCreatedAt(ldt);
-            } catch (Exception e) {
-                log.warn("Arbeitnow - Could not parse created date for job {}: {}", slug, e.getMessage());
-            }
+                job.setCreatedAt(LocalDateTime.ofInstant(Instant.ofEpochSecond(timestamp), ZoneOffset.UTC));
+            } catch (Exception e) { /* ignore */ }
         }
-
+        
         job.setCompanyName(company.getName());
-
-        if (job.getCreatedAt() == null) {
-            job.setCreatedAt(LocalDateTime.now());
-        }
+        if (job.getCreatedAt() == null) job.setCreatedAt(LocalDateTime.now());
 
         Job savedJob = jobRepository.save(job);
-        nerExtractionService.processJob(savedJob);
+        
+        if (runNer) {
+            CompletableFuture<Job> futureJob = nerExtractionService.processJob(savedJob);
+            futureJob.thenAccept(finalJob -> {
+                String skills = finalJob.getSkills().stream().map(s -> s.getName()).collect(Collectors.joining(", "));
+                progressService.sendProgress("SAVED", finalJob.getTitle(), "Skills: " + (skills.isEmpty() ? "None found" : skills));
+            });
+        } else {
+            log.info("Saved new Arbeitnow job ID {} without running NER.", savedJob.getId());
+        }
     }
 }

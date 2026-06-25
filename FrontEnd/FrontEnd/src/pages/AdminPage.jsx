@@ -239,8 +239,11 @@ const AdminPage = () => {
 
     const handleReprocessRelationships = async () => {
         if (isReprocessing) return;
+        const isConfirmed = window.confirm(`CONFIRM COMPANY RECOVERY\n\nThis will scan all job descriptions to find and link companies. This is a very intensive and long-running task.\n\nAre you sure you want to start?`);
+        if (!isConfirmed) return;
+
         setIsReprocessing(true);
-        setReprocessMessage('Starting relationship reprocessing for all jobs...');
+        setReprocessMessage('Starting company recovery and linking process...');
         try {
             const response = await fetch('/api/maintenance/reprocess-relationships', { 
                 method: 'POST',
@@ -252,7 +255,8 @@ const AdminPage = () => {
         } catch (error) {
             setReprocessMessage(`Error: ${error.message}`);
         } finally {
-            setTimeout(() => setIsReprocessing(false), 10000);
+            // Keep the message and disabled state for a long time
+            // The user can check the backend logs for progress
         }
     };
 
@@ -403,15 +407,15 @@ const AdminPage = () => {
             </div>
 
             <div className="section-container">
-                <h2 className="section-title">Maintenance Tasks</h2>
+                <h2 className="section-title">Maintenance & Recovery Tasks</h2>
                 <div className="task-card">
                     <div className="task-info">
-                        <h3>Reprocess All Relationships</h3>
-                        <p>Scans all jobs and re-creates missing links to Companies, Skills, and Occupations. Use this to fix old data.</p>
+                        <h3>Recover Company Relationships</h3>
+                        <p>Scans all job descriptions for names of known companies and creates missing relationships. This is a very slow, intensive task.</p>
                     </div>
                     <div className="task-actions">
                         <button onClick={handleReprocessRelationships} disabled={isReprocessing} className="task-button" style={{backgroundColor: '#e74c3c'}}>
-                            {isReprocessing ? 'Reprocessing...' : 'Fix Relationships'}
+                            {isReprocessing ? 'Recovering...' : 'Recover Relationships'}
                         </button>
                         {reprocessMessage && <p className={`feedback-message ${reprocessMessage.includes('Error') ? 'error' : 'success'}`}>{reprocessMessage}</p>}
                     </div>
